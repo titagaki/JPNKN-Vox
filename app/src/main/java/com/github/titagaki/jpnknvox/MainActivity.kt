@@ -3,8 +3,10 @@ package com.github.titagaki.jpnknvox
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -54,8 +56,29 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // オーバーレイ権限をチェック
+        checkOverlayPermission()
+
         // アプリ起動時に通知権限をチェックし、サービスを開始
         checkNotificationPermissionAndStartService()
+    }
+
+    /**
+     * オーバーレイ権限をチェック
+     */
+    private fun checkOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!Settings.canDrawOverlays(this)) {
+                Log.d(TAG, "Overlay permission not granted, requesting...")
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
+                startActivity(intent)
+            } else {
+                Log.d(TAG, "Overlay permission already granted")
+            }
+        }
     }
 
     /**

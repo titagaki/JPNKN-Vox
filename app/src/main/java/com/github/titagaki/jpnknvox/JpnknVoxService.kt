@@ -5,16 +5,24 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Color
+import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import android.view.Gravity
+import android.view.LayoutInflater
+import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
+import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import org.eclipse.paho.android.service.MqttAndroidClient
 import org.eclipse.paho.client.mqttv3.IMqttActionListener
@@ -74,12 +82,28 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
     private val speechQueue = ConcurrentLinkedQueue<String>()
     private var isSpeaking = false
 
+    // オーバーレイウィンドウ関連
+    private var windowManager: WindowManager? = null
+    private var overlayView: View? = null
+    private var statusTextView: TextView? = null
+    private var messageTextView: TextView? = null
+    private var lastReceivedMessage: String = ""
+
+    // ドラッグ用の変数
+    private var initialX = 0
+    private var initialY = 0
+    private var initialTouchX = 0f
+    private var initialTouchY = 0f
+
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service onCreate")
 
         // 通知チャンネルを作成
         createNotificationChannel()
+
+        // オーバーレイウィンドウを作成
+        createOverlayWindow()
 
         // MQTT クライアントを初期化
         mqttClient = MqttAndroidClient(
@@ -117,6 +141,9 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
 
         // 再接続を停止
         reconnectHandler.removeCallbacksAndMessages(null)
+
+        // オーバーレイウィンドウを削除
+        removeOverlayWindow()
 
         // MQTT を切断
         try {
@@ -186,6 +213,12 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
                 // テスト発話
                 enqueueSpeech("JPNKN-Vox 起動しました")
 
+                // TTS 初期化完了後、キューに溜まっているメッセージを処理
+                if (speechQueue.isNotEmpty()) {
+                    Log.d(TAG, "Processing queued messages (${speechQueue.size} items)")
+                    processSpeechQueue()
+                }
+
                 // MQTT 接続を開始
                 connectMqtt()
             }
@@ -208,6 +241,12 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
 
         speechQueue.offer(text)
         Log.d(TAG, "Enqueued speech: $text (Queue size: ${speechQueue.size})")
+
+        // TTS が初期化されていない場合は、初期化完了を待つ
+        if (!isTtsInitialized) {
+            Log.w(TAG, "TTS not initialized yet, will process queue after initialization")
+            return
+        }
 
         // キューを処理
         processSpeechQueue()
@@ -336,6 +375,9 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
                     isMqttConnected = true
                     retryAttempts = 0 // 成功したのでカウンターをリセット
 
+                    // オーバーレイ表示を更新
+                    updateOverlayStatus("接続済み", Color.GREEN)
+
                     // トピックを購読
                     subscribeTopic()
 
@@ -346,6 +388,9 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
                     Log.e(TAG, "MQTT connection failed", exception)
                     isMqttConnected = false
+
+                    // オーバーレイ表示を更新
+                    updateOverlayStatus("未接続", Color.RED)
 
                     // サービスが実行中であれば再接続を試みる
                     if (isServiceRunning) {
@@ -423,6 +468,9 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
                 Log.d(TAG, "MQTT connection complete. Reconnect: $reconnect, Server: $serverURI")
                 isMqttConnected = true
 
+                // オーバーレイ表示を更新
+                updateOverlayStatus("接続済み", Color.GREEN)
+
                 if (reconnect) {
                     // 再接続時はトピックを再購読
                     subscribeTopic()
@@ -434,6 +482,9 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
                 Log.e(TAG, "MQTT connection lost", cause)
                 isMqttConnected = false
 
+                // オーバーレイ表示を更新
+                updateOverlayStatus("切断", Color.YELLOW)
+
                 // サービスが実行中であれば再接続を試みる
                 if (isServiceRunning) {
                     scheduleReconnect()
@@ -441,21 +492,37 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
             }
 
             override fun messageArrived(topic: String?, message: MqttMessage?) {
-                if (message == null) return
+                if (message == null) {
+                    Log.w(TAG, "Received null message")
+                    return
+                }
 
                 val payload = String(message.payload)
+
+                // 常に受信ログを出力
+                Log.d("MQTT_TEST", "Received: $payload")
                 Log.d(TAG, "MQTT message arrived on topic $topic: $payload")
 
                 // JSON をパース
                 val jpnknMessage = JpnknMessage.fromJson(payload)
                 if (jpnknMessage != null) {
+                    Log.d(TAG, "JSON parse successful")
+
+                    // メッセージ本文を抽出
                     val messageText = jpnknMessage.extractMessage()
+
+                    // 空でないことを確認してからキューに追加
                     if (messageText.isNotEmpty()) {
                         Log.d(TAG, "Extracted message: $messageText")
+
+                        // オーバーレイに最新メッセージを表示
+                        updateOverlayMessage(messageText)
+
                         // 受信したコメントを読み上げキューに追加
                         enqueueSpeech(messageText)
                     } else {
-                        Log.w(TAG, "Empty message text")
+                        Log.w(TAG, "Empty message text after extraction")
+                        Log.w(TAG, "Original body: ${jpnknMessage.body}")
                     }
                 } else {
                     Log.e(TAG, "Failed to parse JSON message: $payload")
@@ -465,6 +532,137 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
             override fun deliveryComplete(token: IMqttDeliveryToken?) {
                 // このアプリは購読のみなので使用しない
             }
+        }
+    }
+
+    /**
+     * オーバーレイウィンドウを作成
+     */
+    private fun createOverlayWindow() {
+        // オーバーレイ権限をチェック
+        if (!Settings.canDrawOverlays(this)) {
+            Log.w(TAG, "Overlay permission not granted")
+            return
+        }
+
+        try {
+            windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+
+            // オーバーレイビューを作成（プログラムで作成）
+            overlayView = LayoutInflater.from(this).inflate(
+                android.R.layout.simple_list_item_2,
+                null
+            ).apply {
+                // 背景を半透明に設定
+                setBackgroundColor(Color.argb(200, 0, 0, 0))
+                setPadding(16, 8, 16, 8)
+            }
+
+            // TextViewを取得
+            statusTextView = overlayView?.findViewById(android.R.id.text1)
+            messageTextView = overlayView?.findViewById(android.R.id.text2)
+
+            statusTextView?.apply {
+                text = "初期化中..."
+                setTextColor(Color.WHITE)
+                textSize = 14f
+            }
+
+            messageTextView?.apply {
+                text = "起動しました"
+                setTextColor(Color.LTGRAY)
+                textSize = 12f
+            }
+
+            // ウィンドウパラメータを設定
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = 0
+                y = 100
+            }
+
+            // タッチイベントを設定（ドラッグ可能にする）
+            overlayView?.setOnTouchListener { _, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        initialX = params.x
+                        initialY = params.y
+                        initialTouchX = event.rawX
+                        initialTouchY = event.rawY
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        params.x = initialX + (event.rawX - initialTouchX).toInt()
+                        params.y = initialY + (event.rawY - initialTouchY).toInt()
+                        windowManager?.updateViewLayout(overlayView, params)
+                        true
+                    }
+                    else -> false
+                }
+            }
+
+            // ビューを追加
+            windowManager?.addView(overlayView, params)
+            Log.d(TAG, "Overlay window created")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create overlay window", e)
+        }
+    }
+
+    /**
+     * オーバーレイウィンドウを削除
+     */
+    private fun removeOverlayWindow() {
+        try {
+            if (overlayView != null && windowManager != null) {
+                windowManager?.removeView(overlayView)
+                overlayView = null
+                Log.d(TAG, "Overlay window removed")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to remove overlay window", e)
+        }
+    }
+
+    /**
+     * オーバーレイのステータス表示を更新
+     *
+     * @param status ステータステキスト
+     * @param color ステータスの色
+     */
+    private fun updateOverlayStatus(status: String, color: Int) {
+        Handler(Looper.getMainLooper()).post {
+            statusTextView?.text = getString(R.string.app_name) + ": $status"
+            statusTextView?.setTextColor(color)
+        }
+    }
+
+    /**
+     * オーバーレイのメッセージ表示を更新
+     *
+     * @param message メッセージテキスト
+     */
+    private fun updateOverlayMessage(message: String) {
+        // 最新のメッセージを保存
+        lastReceivedMessage = message
+
+        // 先頭30文字を表示
+        val displayText = if (message.length > 30) {
+            message.substring(0, 30) + "..."
+        } else {
+            message
+        }
+
+        Handler(Looper.getMainLooper()).post {
+            messageTextView?.text = displayText
         }
     }
 }
