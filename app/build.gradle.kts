@@ -73,6 +73,9 @@ dependencies {
     // Reactive Streams (HiveMQ が使用)
     implementation("io.reactivex.rxjava3:rxjava:3.1.8")
 
+    // DataStore (設定の永続化)
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

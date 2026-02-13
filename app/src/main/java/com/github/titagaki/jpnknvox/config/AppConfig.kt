@@ -14,12 +14,20 @@ object AppConfig {
         const val USERNAME = "genkai"
         const val PASSWORD = "7144"
         const val DEFAULT_TOPIC = "bbs/mamiko"
+        const val TOPIC_PREFIX = "bbs/"
         const val CLIENT_ID_PREFIX = "jpnkn_vox_android"
 
         // 再接続設定
         const val INITIAL_RETRY_DELAY_MS = 1000L
         const val MAX_RETRY_DELAY_MS = 60000L
         const val MAX_RETRY_ATTEMPTS = 10
+
+        /**
+         * 板 ID からトピックを生成
+         */
+        fun createTopic(boardId: String): String {
+            return "$TOPIC_PREFIX$boardId"
+        }
     }
 
     // 通知設定

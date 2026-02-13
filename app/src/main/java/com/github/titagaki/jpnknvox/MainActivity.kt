@@ -34,8 +34,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.github.titagaki.jpnknvox.config.AppConfig
+import com.github.titagaki.jpnknvox.data.SettingsRepository
 import com.github.titagaki.jpnknvox.ui.theme.JPNKNVoxTheme
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -46,8 +50,14 @@ class MainActivity : ComponentActivity() {
     // サービスの稼働状態
     private var isServiceRunning by mutableStateOf(false)
 
+    // 板 ID
+    private var boardId by mutableStateOf("mamiko")
+
     // ログメッセージのリスト
     private val logMessages = mutableStateListOf<String>()
+
+    // 設定リポジトリ
+    private lateinit var settingsRepository: SettingsRepository
 
     // 通知権限リクエスト用のランチャー
     private val requestNotificationPermissionLauncher = registerForActivityResult(
@@ -76,6 +86,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // 設定リポジトリを初期化
+        settingsRepository = SettingsRepository(this)
+
+        // 保存された板 ID を読み込み
+        lifecycleScope.launch {
+            boardId = settingsRepository.boardIdFlow.first()
+            Log.d(TAG, "Loaded board ID: $boardId")
+        }
+
         // ログレシーバーを登録
         val filter = IntentFilter(AppConfig.Broadcast.ACTION_LOG_UPDATE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -96,6 +115,8 @@ class MainActivity : ComponentActivity() {
             JPNKNVoxTheme {
                 DashboardScreen(
                     isServiceRunning = isServiceRunning,
+                    boardId = boardId,
+                    onBoardIdChange = { newBoardId -> updateBoardId(newBoardId) },
                     logMessages = logMessages,
                     onStartService = { startService() },
                     onStopService = { stopService() },
@@ -121,11 +142,13 @@ class MainActivity : ComponentActivity() {
      * サービスを開始
      */
     private fun startService() {
-        val serviceIntent = Intent(this, JpnknVoxService::class.java)
+        val serviceIntent = Intent(this, JpnknVoxService::class.java).apply {
+            putExtra(JpnknVoxService.EXTRA_BOARD_ID, boardId)
+        }
         startForegroundService(serviceIntent)
         isServiceRunning = true
-        addLogMessage("サービスを開始しました")
-        Log.d(TAG, "JpnknVoxService started")
+        addLogMessage("サービスを開始しました (板: $boardId)")
+        Log.d(TAG, "JpnknVoxService started with board ID: $boardId")
     }
 
     /**
@@ -183,6 +206,17 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
+     * 板 ID を更新・保存
+     */
+    private fun updateBoardId(newBoardId: String) {
+        boardId = newBoardId
+        lifecycleScope.launch {
+            settingsRepository.saveBoardId(newBoardId)
+            Log.d(TAG, "Saved board ID: $newBoardId")
+        }
+    }
+
+    /**
      * ログメッセージを追加
      */
     private fun addLogMessage(message: String) {
@@ -202,6 +236,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun DashboardScreen(
     isServiceRunning: Boolean,
+    boardId: String,
+    onBoardIdChange: (String) -> Unit,
     logMessages: List<String>,
     onStartService: () -> Unit,
     onStopService: () -> Unit,
@@ -229,6 +265,13 @@ fun DashboardScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // 板 ID 設定セクション
+            BoardIdSection(
+                boardId = boardId,
+                onBoardIdChange = onBoardIdChange,
+                isServiceRunning = isServiceRunning
+            )
+
             // サービス制御セクション
             ServiceControlSection(
                 isServiceRunning = isServiceRunning,
@@ -246,6 +289,72 @@ fun DashboardScreen(
 
             // ログ表示セクション
             LogDisplaySection(logMessages = logMessages)
+        }
+    }
+}
+
+@Composable
+fun BoardIdSection(
+    boardId: String,
+    onBoardIdChange: (String) -> Unit,
+    isServiceRunning: Boolean
+) {
+    var textFieldValue by remember(boardId) { mutableStateOf(boardId) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "板 ID 設定",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = "読み上げる板の ID を入力してください (例: mamiko, sumire)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            OutlinedTextField(
+                value = textFieldValue,
+                onValueChange = { newValue ->
+                    // 英数字とアンダースコアのみ許可
+                    val filtered = newValue.filter { it.isLetterOrDigit() || it == '_' }
+                    textFieldValue = filtered
+                },
+                label = { Text("板 ID") },
+                placeholder = { Text("mamiko") },
+                singleLine = true,
+                enabled = !isServiceRunning,
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = {
+                    if (isServiceRunning) {
+                        Text(
+                            text = "サービス稼働中は変更できません",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else {
+                        Text("トピック: bbs/$textFieldValue")
+                    }
+                }
+            )
+
+            Button(
+                onClick = { onBoardIdChange(textFieldValue) },
+                enabled = !isServiceRunning && textFieldValue.isNotBlank() && textFieldValue != boardId,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("保存")
+            }
         }
     }
 }

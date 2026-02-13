@@ -69,8 +69,12 @@ class MqttManager(
 
     /**
      * MQTT サーバーに接続
+     *
+     * @param topic 購読するトピック（省略時はデフォルトトピック）
      */
-    fun connect() {
+    fun connect(topic: String = AppConfig.Mqtt.DEFAULT_TOPIC) {
+        currentTopic = topic
+
         if (isConnected) {
             Log.d(TAG, "Already connected")
             return

@@ -34,6 +34,7 @@ class JpnknVoxService : Service() {
 
     companion object {
         private const val TAG = "JpnknVoxService"
+        const val EXTRA_BOARD_ID = "extra_board_id"
     }
 
     // マネージャー
@@ -41,6 +42,9 @@ class JpnknVoxService : Service() {
     private var ttsManager: TtsManager? = null
     private var mqttManager: MqttManager? = null
     private var overlayManager: OverlayManager? = null
+
+    // 板 ID
+    private var boardId: String = "mamiko"
 
     override fun onCreate() {
         super.onCreate()
@@ -80,6 +84,13 @@ class JpnknVoxService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service onStartCommand")
+
+        // 板 ID を Intent から取得
+        intent?.getStringExtra(EXTRA_BOARD_ID)?.let {
+            boardId = it
+            Log.d(TAG, "Board ID set to: $boardId")
+        }
+
         startForegroundServiceWithNotification()
         return START_STICKY
     }
@@ -112,8 +123,10 @@ class JpnknVoxService : Service() {
         logBroadcaster.info("音声エンジンを初期化しました")
         ttsManager?.enqueue("JPNKN-Vox 起動しました")
 
-        // TTS 初期化後に MQTT 接続を開始
-        mqttManager?.connect()
+        // TTS 初期化後に MQTT 接続を開始（板 ID を使用）
+        val topic = AppConfig.Mqtt.createTopic(boardId)
+        logBroadcaster.info("板 ID: $boardId (トピック: $topic)")
+        mqttManager?.connect(topic)
     }
 
     // ========================================
