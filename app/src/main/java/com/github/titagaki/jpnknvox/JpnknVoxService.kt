@@ -64,6 +64,10 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
         private const val INITIAL_RETRY_DELAY_MS = 1000L // 初回1秒
         private const val MAX_RETRY_DELAY_MS = 60000L // 最大60秒
         private const val MAX_RETRY_ATTEMPTS = 10 // 最大再試行回数
+
+        // ブロードキャストアクション
+        private const val ACTION_LOG_UPDATE = "com.github.titagaki.jpnknvox.LOG_UPDATE"
+        private const val EXTRA_LOG_MESSAGE = "log_message"
     }
 
     private var tts: TextToSpeech? = null
@@ -98,6 +102,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service onCreate")
+        broadcastLog("サービスを初期化しています...")
 
         // 通知チャンネルを作成
         createNotificationChannel()
@@ -183,9 +188,11 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
 
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 Log.e(TAG, "Japanese language is not supported")
+                broadcastLog("エラー: 日本語音声がサポートされていません")
                 isTtsInitialized = false
             } else {
                 Log.d(TAG, "TTS initialized successfully")
+                broadcastLog("音声エンジンを初期化しました")
                 isTtsInitialized = true
 
                 // 読み上げ完了を検知するリスナーを設定
@@ -224,6 +231,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
             }
         } else {
             Log.e(TAG, "TTS initialization failed with status: $status")
+            broadcastLog("エラー: 音声エンジンの初期化に失敗しました")
             isTtsInitialized = false
         }
     }
@@ -372,6 +380,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
             mqttClient?.connect(options, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
                     Log.d(TAG, "MQTT connection successful")
+                    broadcastLog("MQTT 接続成功: $MQTT_SERVER_URI")
                     isMqttConnected = true
                     retryAttempts = 0 // 成功したのでカウンターをリセット
 
@@ -387,6 +396,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
                     Log.e(TAG, "MQTT connection failed", exception)
+                    broadcastLog("MQTT 接続失敗: ${exception?.message ?: "不明なエラー"}")
                     isMqttConnected = false
 
                     // オーバーレイ表示を更新
@@ -400,6 +410,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
             })
         } catch (e: MqttException) {
             Log.e(TAG, "Error connecting to MQTT", e)
+            broadcastLog("MQTT 接続エラー: ${e.message}")
             isMqttConnected = false
 
             // サービスが実行中であれば再接続を試みる
@@ -417,14 +428,17 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
             mqttClient?.subscribe(MQTT_TOPIC, 0, null, object : IMqttActionListener {
                 override fun onSuccess(asyncActionToken: IMqttToken?) {
                     Log.d(TAG, "Subscribed to topic: $MQTT_TOPIC")
+                    broadcastLog("トピック購読成功: $MQTT_TOPIC")
                 }
 
                 override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
                     Log.e(TAG, "Failed to subscribe to topic: $MQTT_TOPIC", exception)
+                    broadcastLog("トピック購読失敗: ${exception?.message}")
                 }
             })
         } catch (e: MqttException) {
             Log.e(TAG, "Error subscribing to topic", e)
+            broadcastLog("トピック購読エラー: ${e.message}")
         }
     }
 
@@ -440,6 +454,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
         // 最大再試行回数を超えた場合
         if (retryAttempts >= MAX_RETRY_ATTEMPTS) {
             Log.e(TAG, "Max retry attempts reached ($MAX_RETRY_ATTEMPTS), giving up")
+            broadcastLog("再接続失敗: 最大試行回数に達しました")
             enqueueSpeech("接続に失敗しました")
             return
         }
@@ -452,6 +467,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
 
         retryAttempts++
         Log.d(TAG, "Scheduling reconnection attempt $retryAttempts in ${delay}ms")
+        broadcastLog("再接続を試行します (試行 $retryAttempts/$MAX_RETRY_ATTEMPTS, ${delay}ms 後)")
 
         reconnectHandler.postDelayed({
             Log.d(TAG, "Reconnection attempt $retryAttempts")
@@ -466,6 +482,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
         return object : MqttCallbackExtended {
             override fun connectComplete(reconnect: Boolean, serverURI: String?) {
                 Log.d(TAG, "MQTT connection complete. Reconnect: $reconnect, Server: $serverURI")
+                broadcastLog("MQTT 接続完了: ${if (reconnect) "再接続" else "初回接続"}")
                 isMqttConnected = true
 
                 // オーバーレイ表示を更新
@@ -480,6 +497,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
 
             override fun connectionLost(cause: Throwable?) {
                 Log.e(TAG, "MQTT connection lost", cause)
+                broadcastLog("MQTT 接続が切断されました: ${cause?.message ?: "不明な理由"}")
                 isMqttConnected = false
 
                 // オーバーレイ表示を更新
@@ -514,6 +532,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
                     // 空でないことを確認してからキューに追加
                     if (messageText.isNotEmpty()) {
                         Log.d(TAG, "Extracted message: $messageText")
+                        broadcastLog("メッセージ受信: $messageText")
 
                         // オーバーレイに最新メッセージを表示
                         updateOverlayMessage(messageText)
@@ -526,6 +545,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
                     }
                 } else {
                     Log.e(TAG, "Failed to parse JSON message: $payload")
+                    broadcastLog("JSON パースエラー")
                 }
             }
 
@@ -664,6 +684,19 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
         Handler(Looper.getMainLooper()).post {
             messageTextView?.text = displayText
         }
+    }
+
+    /**
+     * ログを MainActivity にブロードキャスト
+     *
+     * @param message ログメッセージ
+     */
+    private fun broadcastLog(message: String) {
+        val intent = Intent(ACTION_LOG_UPDATE).apply {
+            putExtra(EXTRA_LOG_MESSAGE, message)
+        }
+        sendBroadcast(intent)
+        Log.d(TAG, "Broadcasted log: $message")
     }
 }
 
