@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -15,14 +16,16 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
+import org.eclipse.paho.android.service.MqttAndroidClient
+import org.eclipse.paho.client.mqttv3.IMqttActionListener
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
+import org.eclipse.paho.client.mqttv3.IMqttToken
+import org.eclipse.paho.client.mqttv3.MqttCallbackExtended
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions
+import org.eclipse.paho.client.mqttv3.MqttException
+import org.eclipse.paho.client.mqttv3.MqttMessage
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.TimeUnit
 import kotlin.math.min
 import kotlin.math.pow
 
@@ -31,7 +34,7 @@ import kotlin.math.pow
  *
  * - Foreground Service として常駐し、OS によるタスクキルを防止
  * - TextToSpeech を使用してコメントを読み上げ
- * - WebSocket でリアルタイムコメント受信
+ * - MQTT でリアルタイムコメント受信
  * - 指数バックオフによる自動再接続
  * - Android 14 以降の制約に対応
  */
@@ -42,8 +45,12 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
         private const val NOTIFICATION_CHANNEL_ID = "jpnkn_vox_channel"
         private const val NOTIFICATION_ID = 1
 
-        // WebSocket 接続先（仮のURL - 実際の接続先に変更してください）
-        private const val WEBSOCKET_URL = "wss://example.jpnkn.com/ws"
+        // MQTT 接続情報
+        private const val MQTT_SERVER_URI = "tcp://bbs.jpnkn.com:1883"
+        private const val MQTT_USERNAME = "genkai"
+        private const val MQTT_PASSWORD = "7144"
+        private const val MQTT_TOPIC = "bbs/mamiko" // テスト用固定
+        private const val MQTT_CLIENT_ID = "jpnkn_vox_android"
 
         // 再接続設定
         private const val INITIAL_RETRY_DELAY_MS = 1000L // 初回1秒
@@ -54,10 +61,9 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private var isTtsInitialized = false
 
-    // WebSocket 関連
-    private var okHttpClient: OkHttpClient? = null
-    private var webSocket: WebSocket? = null
-    private var isWebSocketConnected = false
+    // MQTT 関連
+    private var mqttClient: MqttAndroidClient? = null
+    private var isMqttConnected = false
 
     // 再接続制御
     private val reconnectHandler = Handler(Looper.getMainLooper())
@@ -75,13 +81,15 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
         // 通知チャンネルを作成
         createNotificationChannel()
 
-        // OkHttpClient を初期化
-        okHttpClient = OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(0, TimeUnit.MILLISECONDS) // WebSocket は無制限
-            .writeTimeout(10, TimeUnit.SECONDS)
-            .pingInterval(30, TimeUnit.SECONDS) // Keep-alive
-            .build()
+        // MQTT クライアントを初期化
+        mqttClient = MqttAndroidClient(
+            applicationContext,
+            MQTT_SERVER_URI,
+            MQTT_CLIENT_ID
+        )
+
+        // MQTT コールバックを設定
+        mqttClient?.setCallback(createMqttCallback())
 
         // TextToSpeech を初期化
         tts = TextToSpeech(this, this)
@@ -110,15 +118,18 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
         // 再接続を停止
         reconnectHandler.removeCallbacksAndMessages(null)
 
-        // WebSocket を切断
-        webSocket?.close(1000, "Service stopped")
-        webSocket = null
-        isWebSocketConnected = false
-
-        // OkHttpClient をシャットダウン
-        okHttpClient?.dispatcher?.executorService?.shutdown()
-        okHttpClient?.connectionPool?.evictAll()
-        okHttpClient = null
+        // MQTT を切断
+        try {
+            if (mqttClient?.isConnected == true) {
+                mqttClient?.disconnect()
+                Log.d(TAG, "MQTT disconnected")
+            }
+            mqttClient?.unregisterResources()
+            mqttClient = null
+            isMqttConnected = false
+        } catch (e: MqttException) {
+            Log.e(TAG, "Error disconnecting MQTT", e)
+        }
 
         // TTS リソースを解放
         tts?.let { textToSpeech ->
@@ -175,8 +186,8 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
                 // テスト発話
                 enqueueSpeech("JPNKN-Vox 起動しました")
 
-                // WebSocket 接続を開始
-                connectWebSocket()
+                // MQTT 接続を開始
+                connectMqtt()
             }
         } else {
             Log.e(TAG, "TTS initialization failed with status: $status")
@@ -285,7 +296,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("JPNKN Vox")
-            .setContentText("読み上げサービス実行中")
+            .setContentText("JPNKN 接続中")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
@@ -294,30 +305,86 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
     }
 
     /**
-     * WebSocket に接続
+     * MQTT に接続
      */
-    private fun connectWebSocket() {
+    private fun connectMqtt() {
         if (!isServiceRunning) {
-            Log.d(TAG, "Service is not running, skipping WebSocket connection")
+            Log.d(TAG, "Service is not running, skipping MQTT connection")
             return
         }
 
-        if (isWebSocketConnected) {
-            Log.d(TAG, "WebSocket is already connected")
+        if (isMqttConnected) {
+            Log.d(TAG, "MQTT is already connected")
             return
         }
 
-        Log.d(TAG, "Connecting to WebSocket: $WEBSOCKET_URL")
+        Log.d(TAG, "Connecting to MQTT: $MQTT_SERVER_URI")
 
-        val request = Request.Builder()
-            .url(WEBSOCKET_URL)
-            .build()
+        val options = MqttConnectOptions().apply {
+            userName = MQTT_USERNAME
+            password = MQTT_PASSWORD.toCharArray()
+            isCleanSession = false
+            isAutomaticReconnect = false // 手動で再接続制御
+            connectionTimeout = 10
+            keepAliveInterval = 60
+        }
 
-        webSocket = okHttpClient?.newWebSocket(request, createWebSocketListener())
+        try {
+            mqttClient?.connect(options, null, object : IMqttActionListener {
+                override fun onSuccess(asyncActionToken: IMqttToken?) {
+                    Log.d(TAG, "MQTT connection successful")
+                    isMqttConnected = true
+                    retryAttempts = 0 // 成功したのでカウンターをリセット
+
+                    // トピックを購読
+                    subscribeTopic()
+
+                    // 接続成功を通知
+                    enqueueSpeech("接続しました")
+                }
+
+                override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
+                    Log.e(TAG, "MQTT connection failed", exception)
+                    isMqttConnected = false
+
+                    // サービスが実行中であれば再接続を試みる
+                    if (isServiceRunning) {
+                        scheduleReconnect()
+                    }
+                }
+            })
+        } catch (e: MqttException) {
+            Log.e(TAG, "Error connecting to MQTT", e)
+            isMqttConnected = false
+
+            // サービスが実行中であれば再接続を試みる
+            if (isServiceRunning) {
+                scheduleReconnect()
+            }
+        }
     }
 
     /**
-     * WebSocket 再接続（指数バックオフアルゴリズム）
+     * MQTT トピックを購読
+     */
+    private fun subscribeTopic() {
+        try {
+            mqttClient?.subscribe(MQTT_TOPIC, 0, null, object : IMqttActionListener {
+                override fun onSuccess(asyncActionToken: IMqttToken?) {
+                    Log.d(TAG, "Subscribed to topic: $MQTT_TOPIC")
+                }
+
+                override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
+                    Log.e(TAG, "Failed to subscribe to topic: $MQTT_TOPIC", exception)
+                }
+            })
+        } catch (e: MqttException) {
+            Log.e(TAG, "Error subscribing to topic", e)
+        }
+    }
+
+    /**
+     * MQTT 再接続（指数バックオフアルゴリズム）
      */
     private fun scheduleReconnect() {
         if (!isServiceRunning) {
@@ -328,7 +395,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
         // 最大再試行回数を超えた場合
         if (retryAttempts >= MAX_RETRY_ATTEMPTS) {
             Log.e(TAG, "Max retry attempts reached ($MAX_RETRY_ATTEMPTS), giving up")
-            // TODO: ユーザーに通知を表示
+            enqueueSpeech("接続に失敗しました")
             return
         }
 
@@ -343,40 +410,29 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
 
         reconnectHandler.postDelayed({
             Log.d(TAG, "Reconnection attempt $retryAttempts")
-            connectWebSocket()
+            connectMqtt()
         }, delay)
     }
 
     /**
-     * WebSocketListener を作成
+     * MqttCallback を作成
      */
-    private fun createWebSocketListener(): WebSocketListener {
-        return object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.d(TAG, "WebSocket connected")
-                isWebSocketConnected = true
-                retryAttempts = 0 // 成功したのでカウンターをリセット
+    private fun createMqttCallback(): MqttCallbackExtended {
+        return object : MqttCallbackExtended {
+            override fun connectComplete(reconnect: Boolean, serverURI: String?) {
+                Log.d(TAG, "MQTT connection complete. Reconnect: $reconnect, Server: $serverURI")
+                isMqttConnected = true
 
-                // 接続成功を通知
-                enqueueSpeech("接続しました")
+                if (reconnect) {
+                    // 再接続時はトピックを再購読
+                    subscribeTopic()
+                    enqueueSpeech("再接続しました")
+                }
             }
 
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d(TAG, "WebSocket message received: $text")
-
-                // 受信したコメントを読み上げキューに追加
-                enqueueSpeech(text)
-            }
-
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "WebSocket closing: $code / $reason")
-                webSocket.close(1000, null)
-                isWebSocketConnected = false
-            }
-
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.d(TAG, "WebSocket closed: $code / $reason")
-                isWebSocketConnected = false
+            override fun connectionLost(cause: Throwable?) {
+                Log.e(TAG, "MQTT connection lost", cause)
+                isMqttConnected = false
 
                 // サービスが実行中であれば再接続を試みる
                 if (isServiceRunning) {
@@ -384,14 +440,30 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
                 }
             }
 
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "WebSocket failure: ${t.message}", t)
-                isWebSocketConnected = false
+            override fun messageArrived(topic: String?, message: MqttMessage?) {
+                if (message == null) return
 
-                // サービスが実行中であれば再接続を試みる
-                if (isServiceRunning) {
-                    scheduleReconnect()
+                val payload = String(message.payload)
+                Log.d(TAG, "MQTT message arrived on topic $topic: $payload")
+
+                // JSON をパース
+                val jpnknMessage = JpnknMessage.fromJson(payload)
+                if (jpnknMessage != null) {
+                    val messageText = jpnknMessage.extractMessage()
+                    if (messageText.isNotEmpty()) {
+                        Log.d(TAG, "Extracted message: $messageText")
+                        // 受信したコメントを読み上げキューに追加
+                        enqueueSpeech(messageText)
+                    } else {
+                        Log.w(TAG, "Empty message text")
+                    }
+                } else {
+                    Log.e(TAG, "Failed to parse JSON message: $payload")
                 }
+            }
+
+            override fun deliveryComplete(token: IMqttDeliveryToken?) {
+                // このアプリは購読のみなので使用しない
             }
         }
     }
