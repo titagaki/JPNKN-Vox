@@ -35,6 +35,23 @@ android {
     buildFeatures {
         compose = true
     }
+
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/INDEX.LIST",
+                "META-INF/io.netty.versions.properties",
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/license.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/notice.txt",
+                "META-INF/*.kotlin_module"
+            )
+        }
+    }
 }
 
 dependencies {
@@ -50,12 +67,11 @@ dependencies {
     // WebSocket 通信用
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // MQTT 通信用
-    implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
-    implementation("org.eclipse.paho:org.eclipse.paho.android.service:1.1.1")
+    // MQTT 通信用 (HiveMQ - Android 14+ 対応)
+    implementation("com.hivemq:hivemq-mqtt-client:1.3.3")
 
-    // LocalBroadcastManager (Paho MQTT が内部で使用)
-    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
+    // Reactive Streams (HiveMQ が使用)
+    implementation("io.reactivex.rxjava3:rxjava:3.1.8")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

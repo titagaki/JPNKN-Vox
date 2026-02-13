@@ -24,16 +24,12 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
-import org.eclipse.paho.android.service.MqttAndroidClient
-import org.eclipse.paho.client.mqttv3.IMqttActionListener
-import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
-import org.eclipse.paho.client.mqttv3.IMqttToken
-import org.eclipse.paho.client.mqttv3.MqttCallbackExtended
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions
-import org.eclipse.paho.client.mqttv3.MqttException
-import org.eclipse.paho.client.mqttv3.MqttMessage
+import com.hivemq.client.mqtt.MqttClient
+import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient
+import com.hivemq.client.mqtt.mqtt3.message.publish.Mqtt3Publish
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.TimeUnit
 import kotlin.math.min
 import kotlin.math.pow
 
@@ -54,7 +50,8 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
         private const val NOTIFICATION_ID = 1
 
         // MQTT 接続情報
-        private const val MQTT_SERVER_URI = "tcp://bbs.jpnkn.com:1883"
+        private const val MQTT_SERVER_HOST = "bbs.jpnkn.com"
+        private const val MQTT_SERVER_PORT = 1883
         private const val MQTT_USERNAME = "genkai"
         private const val MQTT_PASSWORD = "7144"
         private const val MQTT_TOPIC = "bbs/mamiko" // テスト用固定
@@ -74,7 +71,7 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
     private var isTtsInitialized = false
 
     // MQTT 関連
-    private var mqttClient: MqttAndroidClient? = null
+    private var mqttClient: Mqtt3AsyncClient? = null
     private var isMqttConnected = false
 
     // 再接続制御
@@ -111,14 +108,16 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
         createOverlayWindow()
 
         // MQTT クライアントを初期化
-        mqttClient = MqttAndroidClient(
-            applicationContext,
-            MQTT_SERVER_URI,
-            MQTT_CLIENT_ID
-        )
-
-        // MQTT コールバックを設定
-        mqttClient?.setCallback(createMqttCallback())
+        mqttClient = MqttClient.builder()
+            .useMqttVersion3()
+            .identifier(MQTT_CLIENT_ID)
+            .serverHost(MQTT_SERVER_HOST)
+            .serverPort(MQTT_SERVER_PORT)
+            .automaticReconnect()
+                .initialDelay(INITIAL_RETRY_DELAY_MS, TimeUnit.MILLISECONDS)
+                .maxDelay(MAX_RETRY_DELAY_MS, TimeUnit.MILLISECONDS)
+                .applyAutomaticReconnect()
+            .buildAsync()
 
         // TextToSpeech を初期化
         tts = TextToSpeech(this, this)
@@ -152,15 +151,21 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
 
         // MQTT を切断
         try {
-            if (mqttClient?.isConnected == true) {
-                mqttClient?.disconnect()
-                Log.d(TAG, "MQTT disconnected")
+            mqttClient?.let { client ->
+                if (client.state.isConnected) {
+                    client.disconnect().whenComplete { _, throwable ->
+                        if (throwable != null) {
+                            Log.e(TAG, "Error disconnecting MQTT", throwable)
+                        } else {
+                            Log.d(TAG, "MQTT disconnected")
+                        }
+                    }
+                }
             }
-            mqttClient?.unregisterResources()
             mqttClient = null
             isMqttConnected = false
-        } catch (e: MqttException) {
-            Log.e(TAG, "Error disconnecting MQTT", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during MQTT cleanup", e)
         }
 
         // TTS リソースを解放
@@ -365,58 +370,38 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
             return
         }
 
-        Log.d(TAG, "Connecting to MQTT: $MQTT_SERVER_URI")
+        Log.d(TAG, "Connecting to MQTT: $MQTT_SERVER_HOST:$MQTT_SERVER_PORT")
+        broadcastLog("MQTT 接続を開始: $MQTT_SERVER_HOST:$MQTT_SERVER_PORT")
 
-        val options = MqttConnectOptions().apply {
-            userName = MQTT_USERNAME
-            password = MQTT_PASSWORD.toCharArray()
-            isCleanSession = false
-            isAutomaticReconnect = false // 手動で再接続制御
-            connectionTimeout = 10
-            keepAliveInterval = 60
-        }
+        mqttClient?.let { client ->
+            client.connectWith()
+                .simpleAuth()
+                    .username(MQTT_USERNAME)
+                    .password(MQTT_PASSWORD.toByteArray())
+                    .applySimpleAuth()
+                .keepAlive(60)
+                .cleanSession(false)
+                .send()
+                .whenComplete { _, throwable ->
+                    if (throwable != null) {
+                        Log.e(TAG, "MQTT connection failed", throwable)
+                        broadcastLog("MQTT 接続失敗: ${throwable.message ?: "不明なエラー"}")
+                        isMqttConnected = false
+                        updateOverlayStatus("未接続", Color.RED)
+                    } else {
+                        Log.d(TAG, "MQTT connection successful")
+                        broadcastLog("MQTT 接続成功: $MQTT_SERVER_HOST:$MQTT_SERVER_PORT")
+                        isMqttConnected = true
+                        retryAttempts = 0
+                        updateOverlayStatus("接続済み", Color.GREEN)
 
-        try {
-            mqttClient?.connect(options, null, object : IMqttActionListener {
-                override fun onSuccess(asyncActionToken: IMqttToken?) {
-                    Log.d(TAG, "MQTT connection successful")
-                    broadcastLog("MQTT 接続成功: $MQTT_SERVER_URI")
-                    isMqttConnected = true
-                    retryAttempts = 0 // 成功したのでカウンターをリセット
+                        // トピックを購読
+                        subscribeTopic()
 
-                    // オーバーレイ表示を更新
-                    updateOverlayStatus("接続済み", Color.GREEN)
-
-                    // トピックを購読
-                    subscribeTopic()
-
-                    // 接続成功を通知
-                    enqueueSpeech("接続しました")
-                }
-
-                override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                    Log.e(TAG, "MQTT connection failed", exception)
-                    broadcastLog("MQTT 接続失敗: ${exception?.message ?: "不明なエラー"}")
-                    isMqttConnected = false
-
-                    // オーバーレイ表示を更新
-                    updateOverlayStatus("未接続", Color.RED)
-
-                    // サービスが実行中であれば再接続を試みる
-                    if (isServiceRunning) {
-                        scheduleReconnect()
+                        // 接続成功を通知
+                        enqueueSpeech("接続しました")
                     }
                 }
-            })
-        } catch (e: MqttException) {
-            Log.e(TAG, "Error connecting to MQTT", e)
-            broadcastLog("MQTT 接続エラー: ${e.message}")
-            isMqttConnected = false
-
-            // サービスが実行中であれば再接続を試みる
-            if (isServiceRunning) {
-                scheduleReconnect()
-            }
         }
     }
 
@@ -424,21 +409,23 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
      * MQTT トピックを購読
      */
     private fun subscribeTopic() {
-        try {
-            mqttClient?.subscribe(MQTT_TOPIC, 0, null, object : IMqttActionListener {
-                override fun onSuccess(asyncActionToken: IMqttToken?) {
-                    Log.d(TAG, "Subscribed to topic: $MQTT_TOPIC")
-                    broadcastLog("トピック購読成功: $MQTT_TOPIC")
+        mqttClient?.let { client ->
+            client.subscribeWith()
+                .topicFilter(MQTT_TOPIC)
+                .qos(com.hivemq.client.mqtt.datatypes.MqttQos.AT_MOST_ONCE)
+                .callback { publish: Mqtt3Publish ->
+                    handleMqttMessage(publish)
                 }
-
-                override fun onFailure(asyncActionToken: IMqttToken?, exception: Throwable?) {
-                    Log.e(TAG, "Failed to subscribe to topic: $MQTT_TOPIC", exception)
-                    broadcastLog("トピック購読失敗: ${exception?.message}")
+                .send()
+                .whenComplete { _, throwable ->
+                    if (throwable != null) {
+                        Log.e(TAG, "Failed to subscribe to topic: $MQTT_TOPIC", throwable)
+                        broadcastLog("トピック購読失敗: ${throwable.message}")
+                    } else {
+                        Log.d(TAG, "Subscribed to topic: $MQTT_TOPIC")
+                        broadcastLog("トピック購読成功: $MQTT_TOPIC")
+                    }
                 }
-            })
-        } catch (e: MqttException) {
-            Log.e(TAG, "Error subscribing to topic", e)
-            broadcastLog("トピック購読エラー: ${e.message}")
         }
     }
 
@@ -476,84 +463,43 @@ class JpnknVoxService : Service(), TextToSpeech.OnInitListener {
     }
 
     /**
-     * MqttCallback を作成
+     * MQTT メッセージを処理
      */
-    private fun createMqttCallback(): MqttCallbackExtended {
-        return object : MqttCallbackExtended {
-            override fun connectComplete(reconnect: Boolean, serverURI: String?) {
-                Log.d(TAG, "MQTT connection complete. Reconnect: $reconnect, Server: $serverURI")
-                broadcastLog("MQTT 接続完了: ${if (reconnect) "再接続" else "初回接続"}")
-                isMqttConnected = true
+    private fun handleMqttMessage(publish: Mqtt3Publish) {
+        val payload = String(publish.payloadAsBytes)
 
-                // オーバーレイ表示を更新
-                updateOverlayStatus("接続済み", Color.GREEN)
+        // 常に受信ログを出力
+        Log.d("MQTT_TEST", "Received: $payload")
+        Log.d(TAG, "MQTT message arrived on topic ${publish.topic}: $payload")
 
-                if (reconnect) {
-                    // 再接続時はトピックを再購読
-                    subscribeTopic()
-                    enqueueSpeech("再接続しました")
-                }
+        // JSON をパース
+        val jpnknMessage = JpnknMessage.fromJson(payload)
+        if (jpnknMessage != null) {
+            Log.d(TAG, "JSON parse successful")
+
+            // メッセージ本文を抽出
+            val messageText = jpnknMessage.extractMessage()
+
+            // 空でないことを確認してからキューに追加
+            if (messageText.isNotEmpty()) {
+                Log.d(TAG, "Extracted message: $messageText")
+                broadcastLog("メッセージ受信: $messageText")
+
+                // オーバーレイに最新メッセージを表示
+                updateOverlayMessage(messageText)
+
+                // 受信したコメントを読み上げキューに追加
+                enqueueSpeech(messageText)
+            } else {
+                Log.w(TAG, "Empty message text after extraction")
+                Log.w(TAG, "Original body: ${jpnknMessage.body}")
             }
-
-            override fun connectionLost(cause: Throwable?) {
-                Log.e(TAG, "MQTT connection lost", cause)
-                broadcastLog("MQTT 接続が切断されました: ${cause?.message ?: "不明な理由"}")
-                isMqttConnected = false
-
-                // オーバーレイ表示を更新
-                updateOverlayStatus("切断", Color.YELLOW)
-
-                // サービスが実行中であれば再接続を試みる
-                if (isServiceRunning) {
-                    scheduleReconnect()
-                }
-            }
-
-            override fun messageArrived(topic: String?, message: MqttMessage?) {
-                if (message == null) {
-                    Log.w(TAG, "Received null message")
-                    return
-                }
-
-                val payload = String(message.payload)
-
-                // 常に受信ログを出力
-                Log.d("MQTT_TEST", "Received: $payload")
-                Log.d(TAG, "MQTT message arrived on topic $topic: $payload")
-
-                // JSON をパース
-                val jpnknMessage = JpnknMessage.fromJson(payload)
-                if (jpnknMessage != null) {
-                    Log.d(TAG, "JSON parse successful")
-
-                    // メッセージ本文を抽出
-                    val messageText = jpnknMessage.extractMessage()
-
-                    // 空でないことを確認してからキューに追加
-                    if (messageText.isNotEmpty()) {
-                        Log.d(TAG, "Extracted message: $messageText")
-                        broadcastLog("メッセージ受信: $messageText")
-
-                        // オーバーレイに最新メッセージを表示
-                        updateOverlayMessage(messageText)
-
-                        // 受信したコメントを読み上げキューに追加
-                        enqueueSpeech(messageText)
-                    } else {
-                        Log.w(TAG, "Empty message text after extraction")
-                        Log.w(TAG, "Original body: ${jpnknMessage.body}")
-                    }
-                } else {
-                    Log.e(TAG, "Failed to parse JSON message: $payload")
-                    broadcastLog("JSON パースエラー")
-                }
-            }
-
-            override fun deliveryComplete(token: IMqttDeliveryToken?) {
-                // このアプリは購読のみなので使用しない
-            }
+        } else {
+            Log.e(TAG, "Failed to parse JSON message: $payload")
+            broadcastLog("JSON パースエラー")
         }
     }
+
 
     /**
      * オーバーレイウィンドウを作成

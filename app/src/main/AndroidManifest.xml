@@ -47,11 +47,6 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="tts_reader" />
         </service>
-
-        <!-- Paho MQTT Service -->
-        <service
-            android:name="org.eclipse.paho.android.service.MqttService"
-            android:exported="false" />
     </application>
 
 </manifest>
