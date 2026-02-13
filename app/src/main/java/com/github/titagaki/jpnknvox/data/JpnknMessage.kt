@@ -1,4 +1,4 @@
-package com.github.titagaki.jpnknvox
+package com.github.titagaki.jpnknvox.data
 
 import org.json.JSONObject
 
@@ -19,6 +19,7 @@ data class JpnknMessage(
     val bbsid: String,
     val threadkey: String
 ) {
+
     /**
      * body フィールドから本文を抽出
      *
@@ -42,7 +43,6 @@ data class JpnknMessage(
     /**
      * 名前を抽出
      */
-    @Suppress("unused")
     fun extractName(): String {
         val parts = body.split("<>")
         return if (parts.isNotEmpty()) {
@@ -52,7 +52,33 @@ data class JpnknMessage(
         }
     }
 
+    /**
+     * メール欄を抽出
+     */
+    fun extractMail(): String {
+        val parts = body.split("<>")
+        return if (parts.size >= 2) {
+            parts[1].trim()
+        } else {
+            ""
+        }
+    }
+
+    /**
+     * 日時を抽出
+     */
+    fun extractDate(): String {
+        val parts = body.split("<>")
+        return if (parts.size >= 3) {
+            parts[2].trim()
+        } else {
+            ""
+        }
+    }
+
     companion object {
+        private const val BODY_DELIMITER = "<>"
+
         /**
          * JSON 文字列からパース
          *
@@ -63,12 +89,12 @@ data class JpnknMessage(
             return try {
                 val jsonObject = JSONObject(json)
                 JpnknMessage(
-                    body = jsonObject.getString("body"),
-                    no = jsonObject.getString("no"),
-                    bbsid = jsonObject.getString("bbsid"),
-                    threadkey = jsonObject.getString("threadkey")
+                    body = jsonObject.optString("body", ""),
+                    no = jsonObject.optString("no", ""),
+                    bbsid = jsonObject.optString("bbsid", ""),
+                    threadkey = jsonObject.optString("threadkey", "")
                 )
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 null
             }
         }

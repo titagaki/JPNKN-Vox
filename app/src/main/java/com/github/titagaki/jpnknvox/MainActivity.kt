@@ -34,14 +34,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.github.titagaki.jpnknvox.config.AppConfig
 import com.github.titagaki.jpnknvox.ui.theme.JPNKNVoxTheme
 
 class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
-        const val ACTION_LOG_UPDATE = "com.github.titagaki.jpnknvox.LOG_UPDATE"
-        const val EXTRA_LOG_MESSAGE = "log_message"
     }
 
     // サービスの稼働状態
@@ -64,8 +63,8 @@ class MainActivity : ComponentActivity() {
     // ログ受信用のブロードキャストレシーバー
     private val logReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == ACTION_LOG_UPDATE) {
-                val message = intent.getStringExtra(EXTRA_LOG_MESSAGE)
+            if (intent?.action == AppConfig.Broadcast.ACTION_LOG_UPDATE) {
+                val message = intent.getStringExtra(AppConfig.Broadcast.EXTRA_LOG_MESSAGE)
                 if (message != null) {
                     addLogMessage(message)
                 }
@@ -78,7 +77,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         // ログレシーバーを登録
-        val filter = IntentFilter(ACTION_LOG_UPDATE)
+        val filter = IntentFilter(AppConfig.Broadcast.ACTION_LOG_UPDATE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(logReceiver, filter, RECEIVER_NOT_EXPORTED)
         } else {
@@ -154,14 +153,12 @@ class MainActivity : ComponentActivity() {
      * オーバーレイ権限をリクエスト
      */
     private fun requestOverlayPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName")
-            )
-            startActivity(intent)
-            addLogMessage("オーバーレイ権限の設定画面を開きました")
-        }
+        val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:$packageName")
+        )
+        startActivity(intent)
+        addLogMessage("オーバーレイ権限の設定画面を開きました")
     }
 
     /**
@@ -182,11 +179,7 @@ class MainActivity : ComponentActivity() {
      * オーバーレイ権限を確認
      */
     private fun checkOverlayPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Settings.canDrawOverlays(this)
-        } else {
-            true
-        }
+        return Settings.canDrawOverlays(this)
     }
 
     /**
