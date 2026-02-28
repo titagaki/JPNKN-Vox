@@ -76,6 +76,18 @@ data class JpnknMessage(
         }
     }
 
+    /**
+     * JSON 文字列に変換
+     */
+    fun toJson(): String {
+        return JSONObject().apply {
+            put("body", body)
+            put("no", no)
+            put("bbsid", bbsid)
+            put("threadkey", threadkey)
+        }.toString()
+    }
+
     companion object {
         private const val BODY_DELIMITER = "<>"
 

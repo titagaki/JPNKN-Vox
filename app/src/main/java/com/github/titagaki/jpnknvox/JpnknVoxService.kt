@@ -150,6 +150,12 @@ class JpnknVoxService : Service() {
         logBroadcaster.info("メッセージ受信: $text")
         overlayManager?.updateMessage(text)
         ttsManager?.enqueue(text)
+
+        // ポスト受信をブロードキャスト（MainActivity の ViewModel へ）
+        val postIntent = Intent(AppConfig.Broadcast.ACTION_POST_RECEIVED).apply {
+            putExtra(AppConfig.Broadcast.EXTRA_POST_JSON, message.toJson())
+        }
+        sendBroadcast(postIntent)
     }
 
     // ========================================

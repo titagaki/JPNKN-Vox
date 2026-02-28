@@ -41,6 +41,9 @@ object AppConfig {
     object Broadcast {
         const val ACTION_LOG_UPDATE = "com.github.titagaki.jpnknvox.LOG_UPDATE"
         const val EXTRA_LOG_MESSAGE = "log_message"
+
+        const val ACTION_POST_RECEIVED = "com.github.titagaki.jpnknvox.POST_RECEIVED"
+        const val EXTRA_POST_JSON = "post_json"
     }
 
     // オーバーレイ設定
