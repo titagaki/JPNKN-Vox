@@ -53,6 +53,7 @@ class JpnknVoxService : Service() {
         // ログブロードキャスターを初期化
         logBroadcaster = LogBroadcaster(this)
         logBroadcaster.info("サービスを初期化しています...")
+        MessageManager.addSystemLog("サービスを初期化しています...")
 
         // 通知チャンネルを作成
         createNotificationChannel()
@@ -68,7 +69,10 @@ class JpnknVoxService : Service() {
         ttsManager = TtsManager(
             context = this,
             onInitialized = { onTtsInitialized() },
-            onError = { message -> logBroadcaster.error(message) }
+            onError = { message ->
+                logBroadcaster.error(message)
+                MessageManager.addSystemLog("TTS エラー: $message")
+            }
         )
 
         // MQTT マネージャーを初期化
@@ -76,7 +80,10 @@ class JpnknVoxService : Service() {
             onConnected = { onMqttConnected() },
             onDisconnected = { cause -> onMqttDisconnected(cause) },
             onMessageReceived = { message -> onMessageReceived(message) },
-            onError = { message -> logBroadcaster.error(message) }
+            onError = { message ->
+                logBroadcaster.error(message)
+                MessageManager.addSystemLog("MQTT エラー: $message")
+            }
         ).also {
             it.initialize()
         }
@@ -99,6 +106,7 @@ class JpnknVoxService : Service() {
 
     override fun onDestroy() {
         Log.d(TAG, "Service onDestroy")
+        MessageManager.addSystemLog("サービスを停止しています...")
 
         // オーバーレイを削除
         overlayManager?.remove()
@@ -121,11 +129,13 @@ class JpnknVoxService : Service() {
 
     private fun onTtsInitialized() {
         logBroadcaster.info("音声エンジンを初期化しました")
+        MessageManager.addSystemLog("音声エンジンを初期化しました")
         ttsManager?.enqueue("JPNKN-Vox 起動しました")
 
         // TTS 初期化後に MQTT 接続を開始（板 ID を使用）
         val topic = AppConfig.Mqtt.createTopic(boardId)
         logBroadcaster.info("板 ID: $boardId (トピック: $topic)")
+        MessageManager.addSystemLog("板 ID: $boardId (トピック: $topic)")
         mqttManager?.connect(topic)
     }
 
@@ -135,6 +145,7 @@ class JpnknVoxService : Service() {
 
     private fun onMqttConnected() {
         logBroadcaster.info("MQTT 接続成功")
+        MessageManager.addSystemLog("MQTT 接続成功")
         overlayManager?.showConnected()
         ttsManager?.enqueue("接続しました")
     }
@@ -142,12 +153,15 @@ class JpnknVoxService : Service() {
     private fun onMqttDisconnected(cause: Throwable?) {
         val message = cause?.message ?: "不明な理由"
         logBroadcaster.warn("MQTT 切断: $message")
+        MessageManager.addSystemLog("MQTT 切断: $message")
         overlayManager?.showDisconnected()
     }
 
     private fun onMessageReceived(message: JpnknMessage) {
         val text = message.extractMessage()
         logBroadcaster.info("メッセージ受信: $text")
+        MessageManager.addMessage(message)
+        MessageManager.addSystemLog("メッセージ受信: No.${message.no}")
         overlayManager?.updateMessage(text)
         ttsManager?.enqueue(text)
 

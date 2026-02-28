@@ -274,9 +274,7 @@ fun JpnknVoxApp(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Home.route) {
-                HomeScreen(
-                    postHistory = viewModel.postHistory
-                )
+                HomeScreen()
             }
 
             composable(Screen.Log.route) {
