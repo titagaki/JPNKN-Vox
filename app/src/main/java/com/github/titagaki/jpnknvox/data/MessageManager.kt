@@ -1,8 +1,5 @@
-package com.github.titagaki.jpnknvox
+package com.github.titagaki.jpnknvox.data
 
-import com.github.titagaki.jpnknvox.data.JpnknMessage
-import com.github.titagaki.jpnknvox.data.MessageLog
-import com.github.titagaki.jpnknvox.data.toLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

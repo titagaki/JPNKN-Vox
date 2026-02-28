@@ -1,10 +1,7 @@
 package com.github.titagaki.jpnknvox
 
 import android.Manifest
-import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -31,8 +28,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.github.titagaki.jpnknvox.config.AppConfig
-import com.github.titagaki.jpnknvox.data.JpnknMessage
+import com.github.titagaki.jpnknvox.data.MessageManager
 import com.github.titagaki.jpnknvox.ui.navigation.Screen
 import com.github.titagaki.jpnknvox.ui.screens.HomeScreen
 import com.github.titagaki.jpnknvox.ui.screens.LogScreen
@@ -45,10 +41,6 @@ class MainActivity : ComponentActivity() {
         private const val TAG = "MainActivity"
     }
 
-    // ViewModel への参照（ブロードキャストレシーバーからアクセス用）
-    private var viewModelRef: MainViewModel? = null
-
-    // 通知権限リクエスト用のランチャー
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -59,45 +51,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // ログ受信用のブロードキャストレシーバー
-    private val logReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == AppConfig.Broadcast.ACTION_LOG_UPDATE) {
-                val message = intent.getStringExtra(AppConfig.Broadcast.EXTRA_LOG_MESSAGE)
-                if (message != null) {
-                    viewModelRef?.addLogMessage(message)
-                }
-            }
-        }
-    }
-
-    // ポスト受信用のブロードキャストレシーバー
-    private val postReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == AppConfig.Broadcast.ACTION_POST_RECEIVED) {
-                val json = intent.getStringExtra(AppConfig.Broadcast.EXTRA_POST_JSON)
-                if (json != null) {
-                    val message = JpnknMessage.fromJson(json)
-                    if (message != null) {
-                        viewModelRef?.addPost(message)
-                    }
-                }
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // ブロードキャストレシーバーを登録
-        registerReceivers()
-
         setContent {
             JPNKNVoxTheme {
                 val vm: MainViewModel = viewModel()
-                viewModelRef = vm
-
                 JpnknVoxApp(
                     viewModel = vm,
                     onRequestNotificationPermission = { requestNotificationPermission() },
@@ -106,31 +66,6 @@ class MainActivity : ComponentActivity() {
                     hasOverlayPermission = { checkOverlayPermission() }
                 )
             }
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        unregisterReceiver(logReceiver)
-        unregisterReceiver(postReceiver)
-    }
-
-    private fun registerReceivers() {
-        val logFilter = IntentFilter(AppConfig.Broadcast.ACTION_LOG_UPDATE)
-        val postFilter = IntentFilter(AppConfig.Broadcast.ACTION_POST_RECEIVED)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(logReceiver, logFilter, RECEIVER_NOT_EXPORTED)
-            registerReceiver(postReceiver, postFilter, RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("UnspecifiedRegisterReceiverFlag")
-            ContextCompat.registerReceiver(
-                this, logReceiver, logFilter, ContextCompat.RECEIVER_NOT_EXPORTED
-            )
-            @Suppress("UnspecifiedRegisterReceiverFlag")
-            ContextCompat.registerReceiver(
-                this, postReceiver, postFilter, ContextCompat.RECEIVER_NOT_EXPORTED
-            )
         }
     }
 
@@ -183,6 +118,9 @@ fun JpnknVoxApp(
     val isServiceRunning by viewModel.isServiceRunning
     val boardId by viewModel.boardId
 
+    // MessageManager の StateFlow を直接 collect
+    val systemLogs by MessageManager.systemLogs.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -193,13 +131,11 @@ fun JpnknVoxApp(
                     )
                 },
                 actions = {
-                    // サービス稼働状態インジケーター
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
-                        // ステータスドット
                         Box(
                             modifier = Modifier
                                 .size(10.dp)
@@ -216,16 +152,10 @@ fun JpnknVoxApp(
                             else
                                 MaterialTheme.colorScheme.onSurfaceVariant
                         )
-
-                        // サービス開始/停止スイッチ
                         Switch(
                             checked = isServiceRunning,
                             onCheckedChange = { checked ->
-                                if (checked) {
-                                    viewModel.startService()
-                                } else {
-                                    viewModel.stopService()
-                                }
+                                if (checked) viewModel.startService() else viewModel.stopService()
                             },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = MaterialTheme.colorScheme.primary,
@@ -244,20 +174,13 @@ fun JpnknVoxApp(
             NavigationBar {
                 Screen.items.forEach { screen ->
                     NavigationBarItem(
-                        icon = {
-                            Icon(
-                                imageVector = screen.icon,
-                                contentDescription = screen.title
-                            )
-                        },
+                        icon = { Icon(imageVector = screen.icon, contentDescription = screen.title) },
                         label = { Text(screen.title) },
                         selected = currentRoute == screen.route,
                         onClick = {
                             if (currentRoute != screen.route) {
                                 navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
-                                    }
+                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -276,11 +199,8 @@ fun JpnknVoxApp(
             composable(Screen.Home.route) {
                 HomeScreen()
             }
-
             composable(Screen.Log.route) {
-                LogScreen(
-                    logMessages = viewModel.logMessages
-                )
+                LogScreen(logMessages = systemLogs)
             }
 
             composable(Screen.Settings.route) {

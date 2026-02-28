@@ -1,6 +1,7 @@
 package com.github.titagaki.jpnknvox
 
 import com.github.titagaki.jpnknvox.data.JpnknMessage
+import com.github.titagaki.jpnknvox.data.MessageManager
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test

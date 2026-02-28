@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.github.titagaki.jpnknvox.MessageManager
+import com.github.titagaki.jpnknvox.data.MessageManager
 
 /**
  * ログ画面 — システムログを表示

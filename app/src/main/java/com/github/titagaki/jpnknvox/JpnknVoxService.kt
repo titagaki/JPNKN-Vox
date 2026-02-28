@@ -13,6 +13,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.github.titagaki.jpnknvox.config.AppConfig
 import com.github.titagaki.jpnknvox.data.JpnknMessage
+import com.github.titagaki.jpnknvox.data.MessageManager
 import com.github.titagaki.jpnknvox.mqtt.MqttManager
 import com.github.titagaki.jpnknvox.overlay.OverlayManager
 import com.github.titagaki.jpnknvox.tts.TtsManager
