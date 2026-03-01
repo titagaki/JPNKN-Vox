@@ -107,6 +107,7 @@ class TtsManager(
             return
         }
 
+        // 初期化済みであれば即時処理
         processQueue()
     }
 
@@ -163,4 +164,3 @@ class TtsManager(
         Log.d(TAG, "TTS shutdown completed")
     }
 }
-

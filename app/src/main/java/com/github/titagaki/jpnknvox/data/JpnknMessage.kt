@@ -21,18 +21,27 @@ data class JpnknMessage(
 ) {
 
     /**
-     * body フィールドから本文を抽出
+     * body を "<>" で分割したパーツ（キャッシュ）
      *
      * body は "<>" で区切られており、構造は以下の通り:
      * parts[0]: 名前
      * parts[1]: メール欄 (sage等)
      * parts[2]: 日時
      * parts[3]: レス本文
+     * parts[4]: 空文字列（末尾の "<>" による）
+     *
+     * jpnkn API 仕様: body は "名前<>メール<>日時<>本文<>" の形式で末尾に <> がある
+     */
+    private val parts: List<String> by lazy {
+        body.split(BODY_DELIMITER)
+    }
+
+    /**
+     * body フィールドから本文を抽出
      *
      * @return レス本文、取得できない場合は空文字列
      */
     fun extractMessage(): String {
-        val parts = body.split("<>")
         return if (parts.size >= 4) {
             parts[3].trim().replace("<br>", "\n")
         } else {
@@ -44,7 +53,6 @@ data class JpnknMessage(
      * 名前を抽出
      */
     fun extractName(): String {
-        val parts = body.split("<>")
         return if (parts.isNotEmpty()) {
             parts[0].trim()
         } else {
@@ -56,7 +64,6 @@ data class JpnknMessage(
      * メール欄を抽出
      */
     fun extractMail(): String {
-        val parts = body.split("<>")
         return if (parts.size >= 2) {
             parts[1].trim()
         } else {
@@ -68,7 +75,6 @@ data class JpnknMessage(
      * 日時を抽出
      */
     fun extractDate(): String {
-        val parts = body.split("<>")
         return if (parts.size >= 3) {
             parts[2].trim()
         } else {
@@ -106,10 +112,9 @@ data class JpnknMessage(
                     bbsid = jsonObject.optString("bbsid", ""),
                     threadkey = jsonObject.optString("threadkey", "")
                 )
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 null
             }
         }
     }
 }
-
