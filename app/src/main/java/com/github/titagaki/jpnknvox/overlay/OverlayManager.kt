@@ -78,13 +78,13 @@ class OverlayManager(private val context: Context) {
             messageTextView = overlayView?.findViewById(android.R.id.text2)
 
             statusTextView?.apply {
-                text = "初期化中..."
+                text = "待機中"
                 setTextColor(Color.WHITE)
                 textSize = 14f
             }
 
             messageTextView?.apply {
-                text = "起動しました"
+                text = "サービス稼働中"
                 setTextColor(Color.LTGRAY)
                 textSize = 12f
             }

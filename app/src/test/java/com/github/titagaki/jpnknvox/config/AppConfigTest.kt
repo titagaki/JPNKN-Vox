@@ -83,11 +83,5 @@ class AppConfigTest {
     fun `Notification定数 - IDが正の値`() {
         assertTrue(AppConfig.Notification.ID > 0)
     }
-
-    @Test
-    fun `Broadcast定数 - アクション文字列が空でない`() {
-        assertTrue(AppConfig.Broadcast.ACTION_LOG_UPDATE.isNotEmpty())
-        assertTrue(AppConfig.Broadcast.ACTION_POST_RECEIVED.isNotEmpty())
-    }
 }
 

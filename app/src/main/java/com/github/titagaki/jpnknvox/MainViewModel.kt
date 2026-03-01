@@ -31,10 +31,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** 板 ID */
     val boardId = mutableStateOf("mamiko")
 
+    /** オーバーレイ表示有効状態 */
+    val isOverlayEnabled = mutableStateOf(true)
+
+    /** メッセージ最大文字数 */
+    val maxMessageLength = mutableStateOf(100)
+
     init {
         viewModelScope.launch {
             boardId.value = settingsRepository.boardIdFlow.first()
-            Log.d(TAG, "Loaded board ID: ${boardId.value}")
+            isOverlayEnabled.value = settingsRepository.overlayEnabledFlow.first()
+            maxMessageLength.value = settingsRepository.maxMessageLengthFlow.first()
+            Log.d(TAG, "Loaded board ID: ${boardId.value}, overlay enabled: ${isOverlayEnabled.value}, max message length: ${maxMessageLength.value}")
         }
     }
 
@@ -42,7 +50,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * サービスを開始
      */
     fun startService() {
-        serviceController.start(boardId.value)
+        serviceController.start(boardId.value, maxMessageLength.value)
         isServiceRunning.value = true
     }
 
@@ -63,5 +71,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.saveBoardId(newBoardId)
             Log.d(TAG, "Saved board ID: $newBoardId")
         }
+    }
+
+    /**
+     * オーバーレイ有効状態を更新・保存
+     */
+    fun updateOverlayEnabled(enabled: Boolean) {
+        isOverlayEnabled.value = enabled
+        viewModelScope.launch {
+            settingsRepository.saveOverlayEnabled(enabled)
+            Log.d(TAG, "Saved overlay enabled: $enabled")
+        }
+        // サービスが稼働中であればオーバーレイを即時制御
+        serviceController.setOverlayEnabled(enabled)
+    }
+
+    /**
+     * メッセージ最大文字数を更新・保存
+     */
+    fun updateMaxMessageLength(length: Int) {
+        maxMessageLength.value = length
+        viewModelScope.launch {
+            settingsRepository.saveMaxMessageLength(length)
+            Log.d(TAG, "Saved max message length: $length")
+        }
+        // サービスが稼働中であれば最大文字数を即時反映
+        serviceController.setMaxMessageLength(length)
     }
 }

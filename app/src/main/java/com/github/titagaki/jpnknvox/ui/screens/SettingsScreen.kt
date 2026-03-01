@@ -26,6 +26,10 @@ fun SettingsScreen(
     isServiceRunning: Boolean,
     hasNotificationPermission: Boolean,
     hasOverlayPermission: Boolean,
+    isOverlayEnabled: Boolean,
+    onOverlayEnabledChange: (Boolean) -> Unit,
+    maxMessageLength: Int,
+    onMaxMessageLengthChange: (Int) -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
     modifier: Modifier = Modifier
@@ -44,6 +48,19 @@ fun SettingsScreen(
             isServiceRunning = isServiceRunning
         )
 
+        // オーバーレイ設定セクション
+        OverlaySettingCard(
+            isOverlayEnabled = isOverlayEnabled,
+            onOverlayEnabledChange = onOverlayEnabledChange,
+            hasOverlayPermission = hasOverlayPermission
+        )
+
+        // メッセージ長さ設定セクション
+        MessageLengthSettingCard(
+            maxMessageLength = maxMessageLength,
+            onMaxMessageLengthChange = onMaxMessageLengthChange
+        )
+
         // 権限状態セクション
         PermissionStatusCard(
             hasNotificationPermission = hasNotificationPermission,
@@ -51,6 +68,126 @@ fun SettingsScreen(
             onRequestNotificationPermission = onRequestNotificationPermission,
             onRequestOverlayPermission = onRequestOverlayPermission
         )
+    }
+}
+
+@Composable
+private fun MessageLengthSettingCard(
+    maxMessageLength: Int,
+    onMaxMessageLengthChange: (Int) -> Unit
+) {
+    var textFieldValue by remember { mutableStateOf(maxMessageLength.toString()) }
+
+    // maxMessageLength が外部から変更されたら textFieldValue も更新
+    LaunchedEffect(maxMessageLength) {
+        textFieldValue = maxMessageLength.toString()
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "メッセージ文字数制限",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = "指定した文字数を超えるメッセージは「以下略」として省略して読み上げます。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            OutlinedTextField(
+                value = textFieldValue,
+                onValueChange = { newValue ->
+                    val filtered = newValue.filter { it.isDigit() }
+                    textFieldValue = filtered
+                },
+                label = { Text("最大文字数") },
+                placeholder = { Text("100") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            val currentValue = textFieldValue.toIntOrNull()
+            val isValid = currentValue != null && currentValue > 0
+            val isChanged = currentValue != maxMessageLength
+
+            Button(
+                onClick = {
+                    currentValue?.let { onMaxMessageLengthChange(it) }
+                },
+                enabled = isValid && isChanged,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("保存")
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverlaySettingCard(
+    isOverlayEnabled: Boolean,
+    onOverlayEnabledChange: (Boolean) -> Unit,
+    hasOverlayPermission: Boolean
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "オーバーレイ設定",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = "画面上にオーバーレイウィンドウを表示します。オーバーレイ権限が必要です。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "オーバーレイ表示",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Switch(
+                    checked = isOverlayEnabled,
+                    onCheckedChange = onOverlayEnabledChange,
+                    enabled = hasOverlayPermission
+                )
+            }
+
+            if (!hasOverlayPermission) {
+                Text(
+                    text = "オーバーレイ権限がありません。下の「権限状態」から設定してください。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
     }
 }
 

@@ -34,7 +34,7 @@ data class JpnknMessage(
     fun extractMessage(): String {
         val parts = body.split("<>")
         return if (parts.size >= 4) {
-            parts[3].trim()
+            parts[3].trim().replace("<br>", "\n")
         } else {
             ""
         }

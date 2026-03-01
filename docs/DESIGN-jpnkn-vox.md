@@ -114,7 +114,6 @@ UI スイッチ OFF
 
   ```
   onCreate()
-    ├─ LogBroadcaster 初期化
     ├─ NotificationChannel 作成
     ├─ OverlayManager.create()
     ├─ TtsManager(onInitialized = ::onTtsInitialized)
@@ -135,10 +134,10 @@ UI スイッチ OFF
 
   | コールバック | 処理 |
   |---|---|
-  | `onTtsInitialized()` | `MessageManager.addSystemLog`、`MqttManager.connect(topic)` |
-  | `onMqttConnected()` | `MessageManager.addSystemLog`、`OverlayManager.showConnected()`、TTS「接続しました」 |
+  | `onTtsInitialized()` | `MessageManager.addSystemLog`、TTS「じゃぱんくん-Vox 開始しました」、`MqttManager.connect(topic)` |
+  | `onMqttConnected()` | `MessageManager.addSystemLog`、`OverlayManager.showConnected()` |
   | `onMqttDisconnected(cause)` | `MessageManager.addSystemLog`、`OverlayManager.showDisconnected()` |
-  | `onMessageReceived(message)` | `MessageManager.addMessage()`、`addSystemLog()`、`OverlayManager.updateMessage()`、`TtsManager.enqueue()` |
+  | `onMessageReceived(message)` | `MessageManager.addMessage()`、`OverlayManager.updateMessage()`、`TtsManager.enqueue()` |
 
 ---
 

@@ -17,7 +17,6 @@ import com.github.titagaki.jpnknvox.data.MessageManager
 import com.github.titagaki.jpnknvox.mqtt.MqttManager
 import com.github.titagaki.jpnknvox.overlay.OverlayManager
 import com.github.titagaki.jpnknvox.tts.TtsManager
-import com.github.titagaki.jpnknvox.util.LogBroadcaster
 
 /**
  * JPNKN Vox のバックグラウンドサービス
@@ -29,17 +28,17 @@ import com.github.titagaki.jpnknvox.util.LogBroadcaster
  * - MqttManager: MQTT 接続管理
  * - TtsManager: 音声合成管理
  * - OverlayManager: オーバーレイUI管理
- * - LogBroadcaster: ログ配信
  */
 class JpnknVoxService : Service() {
 
     companion object {
         private const val TAG = "JpnknVoxService"
         const val EXTRA_BOARD_ID = "extra_board_id"
+        const val EXTRA_OVERLAY_ENABLED = "extra_overlay_enabled"
+        const val EXTRA_MAX_MESSAGE_LENGTH = "extra_max_message_length"
     }
 
     // マネージャー
-    private lateinit var logBroadcaster: LogBroadcaster
     private var ttsManager: TtsManager? = null
     private var mqttManager: MqttManager? = null
     private var overlayManager: OverlayManager? = null
@@ -47,13 +46,13 @@ class JpnknVoxService : Service() {
     // 板 ID
     private var boardId: String = "mamiko"
 
+    // メッセージ最大文字数
+    private var maxMessageLength: Int = 100
+
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "Service onCreate")
 
-        // ログブロードキャスターを初期化
-        logBroadcaster = LogBroadcaster(this)
-        logBroadcaster.info("サービスを初期化しています...")
         MessageManager.addSystemLog("サービスを初期化しています...")
 
         // 通知チャンネルを作成
@@ -62,7 +61,7 @@ class JpnknVoxService : Service() {
         // オーバーレイマネージャーを初期化
         overlayManager = OverlayManager(this).also {
             if (it.create()) {
-                logBroadcaster.info("オーバーレイを作成しました")
+                MessageManager.addSystemLog("オーバーレイを作成しました")
             }
         }
 
@@ -71,7 +70,6 @@ class JpnknVoxService : Service() {
             context = this,
             onInitialized = { onTtsInitialized() },
             onError = { message ->
-                logBroadcaster.error(message)
                 MessageManager.addSystemLog("TTS エラー: $message")
             }
         )
@@ -82,7 +80,6 @@ class JpnknVoxService : Service() {
             onDisconnected = { cause -> onMqttDisconnected(cause) },
             onMessageReceived = { message -> onMessageReceived(message) },
             onError = { message ->
-                logBroadcaster.error(message)
                 MessageManager.addSystemLog("MQTT エラー: $message")
             }
         ).also {
@@ -97,6 +94,27 @@ class JpnknVoxService : Service() {
         intent?.getStringExtra(EXTRA_BOARD_ID)?.let {
             boardId = it
             Log.d(TAG, "Board ID set to: $boardId")
+        }
+
+        // オーバーレイ有効/無効の制御
+        if (intent != null && intent.hasExtra(EXTRA_OVERLAY_ENABLED)) {
+            val overlayEnabled = intent.getBooleanExtra(EXTRA_OVERLAY_ENABLED, true)
+            if (overlayEnabled) {
+                if (overlayManager == null) {
+                    overlayManager = OverlayManager(this).also { it.create() }
+                    Log.d(TAG, "Overlay created via command")
+                }
+            } else {
+                overlayManager?.remove()
+                overlayManager = null
+                Log.d(TAG, "Overlay removed via command")
+            }
+        }
+
+        // メッセージ最大文字数の制御
+        if (intent != null && intent.hasExtra(EXTRA_MAX_MESSAGE_LENGTH)) {
+            maxMessageLength = intent.getIntExtra(EXTRA_MAX_MESSAGE_LENGTH, 100)
+            Log.d(TAG, "Max message length set to: $maxMessageLength")
         }
 
         startForegroundServiceWithNotification()
@@ -129,13 +147,11 @@ class JpnknVoxService : Service() {
     // ========================================
 
     private fun onTtsInitialized() {
-        logBroadcaster.info("音声エンジンを初期化しました")
         MessageManager.addSystemLog("音声エンジンを初期化しました")
-        ttsManager?.enqueue("JPNKN-Vox 起動しました")
+        ttsManager?.enqueue("じゃぱんくん-Vox 開始しました")
 
         // TTS 初期化後に MQTT 接続を開始（板 ID を使用）
         val topic = AppConfig.Mqtt.createTopic(boardId)
-        logBroadcaster.info("板 ID: $boardId (トピック: $topic)")
         MessageManager.addSystemLog("板 ID: $boardId (トピック: $topic)")
         mqttManager?.connect(topic)
     }
@@ -145,32 +161,29 @@ class JpnknVoxService : Service() {
     // ========================================
 
     private fun onMqttConnected() {
-        logBroadcaster.info("MQTT 接続成功")
         MessageManager.addSystemLog("MQTT 接続成功")
         overlayManager?.showConnected()
-        ttsManager?.enqueue("接続しました")
     }
 
     private fun onMqttDisconnected(cause: Throwable?) {
         val message = cause?.message ?: "不明な理由"
-        logBroadcaster.warn("MQTT 切断: $message")
         MessageManager.addSystemLog("MQTT 切断: $message")
         overlayManager?.showDisconnected()
     }
 
     private fun onMessageReceived(message: JpnknMessage) {
         val text = message.extractMessage()
-        logBroadcaster.info("メッセージ受信: $text")
-        MessageManager.addMessage(message)
-        MessageManager.addSystemLog("メッセージ受信: No.${message.no}")
-        overlayManager?.updateMessage(text)
-        ttsManager?.enqueue(text)
 
-        // ポスト受信をブロードキャスト（MainActivity の ViewModel へ）
-        val postIntent = Intent(AppConfig.Broadcast.ACTION_POST_RECEIVED).apply {
-            putExtra(AppConfig.Broadcast.EXTRA_POST_JSON, message.toJson())
+        // 最大文字数で省略
+        val ttsText = if (text.length > maxMessageLength) {
+            text.substring(0, maxMessageLength) + " 以下略"
+        } else {
+            text
         }
-        sendBroadcast(postIntent)
+
+        MessageManager.addMessage(message)
+        overlayManager?.updateMessage(text)
+        ttsManager?.enqueue(ttsText)
     }
 
     // ========================================
@@ -228,4 +241,3 @@ class JpnknVoxService : Service() {
             .build()
     }
 }
-
