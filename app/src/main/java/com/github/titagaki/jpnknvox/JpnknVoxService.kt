@@ -34,8 +34,11 @@ class JpnknVoxService : Service() {
     companion object {
         private const val TAG = "JpnknVoxService"
         const val EXTRA_BOARD_ID = "extra_board_id"
-        const val EXTRA_OVERLAY_ENABLED = "extra_overlay_enabled"
         const val EXTRA_MAX_MESSAGE_LENGTH = "extra_max_message_length"
+
+        /** 稼働中のインスタンス（設定の即時反映用） */
+        var instance: JpnknVoxService? = null
+            private set
     }
 
     // マネージャー
@@ -51,6 +54,7 @@ class JpnknVoxService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         Log.d(TAG, "Service onCreate")
 
         MessageManager.addSystemLog("サービスを初期化しています...")
@@ -90,30 +94,15 @@ class JpnknVoxService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service onStartCommand")
 
-        // 板 ID を Intent から取得
+        // 板 ID を Intent から取得（起動時のみ有効）
         intent?.getStringExtra(EXTRA_BOARD_ID)?.let {
             boardId = it
             Log.d(TAG, "Board ID set to: $boardId")
         }
 
-        // オーバーレイ有効/無効の制御
-        if (intent != null && intent.hasExtra(EXTRA_OVERLAY_ENABLED)) {
-            val overlayEnabled = intent.getBooleanExtra(EXTRA_OVERLAY_ENABLED, true)
-            if (overlayEnabled) {
-                if (overlayManager == null) {
-                    overlayManager = OverlayManager(this).also { it.create() }
-                    Log.d(TAG, "Overlay created via command")
-                }
-            } else {
-                overlayManager?.remove()
-                overlayManager = null
-                Log.d(TAG, "Overlay removed via command")
-            }
-        }
-
-        // メッセージ最大文字数の制御
-        if (intent != null && intent.hasExtra(EXTRA_MAX_MESSAGE_LENGTH)) {
-            maxMessageLength = intent.getIntExtra(EXTRA_MAX_MESSAGE_LENGTH, 100)
+        // 最大文字数を Intent から取得（起動時のみ有効）
+        intent?.takeIf { it.hasExtra(EXTRA_MAX_MESSAGE_LENGTH) }?.let {
+            maxMessageLength = it.getIntExtra(EXTRA_MAX_MESSAGE_LENGTH, 100)
             Log.d(TAG, "Max message length set to: $maxMessageLength")
         }
 
@@ -125,6 +114,7 @@ class JpnknVoxService : Service() {
 
     override fun onDestroy() {
         Log.d(TAG, "Service onDestroy")
+        instance = null
         MessageManager.addSystemLog("サービスを停止しています...")
 
         // オーバーレイを削除
@@ -140,6 +130,31 @@ class JpnknVoxService : Service() {
         ttsManager = null
 
         super.onDestroy()
+    }
+
+    // ========================================
+    // 設定の即時反映
+    // ========================================
+
+    fun applyOverlayEnabled(enabled: Boolean) {
+        if (enabled) {
+            if (overlayManager == null) {
+                overlayManager = OverlayManager(this).also { it.create() }
+                // 再作成後に現在の接続状態を反映
+                if (mqttManager?.connectionState == true) {
+                    overlayManager?.showConnected()
+                } else {
+                    overlayManager?.showDisconnected()
+                }
+            }
+        } else {
+            overlayManager?.remove()
+            overlayManager = null
+        }
+    }
+
+    fun applyMaxMessageLength(length: Int) {
+        maxMessageLength = length
     }
 
     // ========================================

@@ -35,28 +35,22 @@ class ServiceController(private val application: Application) {
     }
 
     /**
-     * オーバーレイの表示/非表示をサービスに通知する
+     * オーバーレイの表示/非表示をサービスに即時反映する
      *
      * @param enabled true でオーバーレイを表示、false で非表示
      */
     fun setOverlayEnabled(enabled: Boolean) {
-        val intent = Intent(application, JpnknVoxService::class.java).apply {
-            putExtra(JpnknVoxService.EXTRA_OVERLAY_ENABLED, enabled)
-        }
-        application.startService(intent)
+        JpnknVoxService.instance?.applyOverlayEnabled(enabled)
         Log.d(TAG, "Overlay enabled set to: $enabled")
     }
 
     /**
-     * メッセージ最大文字数をサービスに通知する
+     * メッセージ最大文字数をサービスに即時反映する
      *
      * @param length 最大文字数
      */
     fun setMaxMessageLength(length: Int) {
-        val intent = Intent(application, JpnknVoxService::class.java).apply {
-            putExtra(JpnknVoxService.EXTRA_MAX_MESSAGE_LENGTH, length)
-        }
-        application.startService(intent)
+        JpnknVoxService.instance?.applyMaxMessageLength(length)
         Log.d(TAG, "Max message length set to: $length")
     }
 }

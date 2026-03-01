@@ -48,6 +48,12 @@ fun SettingsScreen(
             isServiceRunning = isServiceRunning
         )
 
+        // メッセージ文字数制限セクション
+        MessageLengthSettingCard(
+            maxMessageLength = maxMessageLength,
+            onMaxMessageLengthChange = onMaxMessageLengthChange
+        )
+
         // オーバーレイ設定セクション
         OverlaySettingCard(
             isOverlayEnabled = isOverlayEnabled,
@@ -55,11 +61,6 @@ fun SettingsScreen(
             hasOverlayPermission = hasOverlayPermission
         )
 
-        // メッセージ長さ設定セクション
-        MessageLengthSettingCard(
-            maxMessageLength = maxMessageLength,
-            onMaxMessageLengthChange = onMaxMessageLengthChange
-        )
 
         // 権限状態セクション
         PermissionStatusCard(
@@ -77,17 +78,17 @@ private fun MessageLengthSettingCard(
     onMaxMessageLengthChange: (Int) -> Unit
 ) {
     var textFieldValue by remember { mutableStateOf(maxMessageLength.toString()) }
+    var isDirty by remember { mutableStateOf(false) }
 
-    // maxMessageLength が外部から変更されたら textFieldValue も更新
+    // 外部から値が変更されたら textFieldValue を更新し、dirty をリセット
     LaunchedEffect(maxMessageLength) {
         textFieldValue = maxMessageLength.toString()
+        isDirty = false
     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
@@ -111,22 +112,24 @@ private fun MessageLengthSettingCard(
                 onValueChange = { newValue ->
                     val filtered = newValue.filter { it.isDigit() }
                     textFieldValue = filtered
+                    isDirty = true
                 },
                 label = { Text("最大文字数") },
-                placeholder = { Text("100") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
             val currentValue = textFieldValue.toIntOrNull()
             val isValid = currentValue != null && currentValue > 0
-            val isChanged = currentValue != maxMessageLength
 
             Button(
                 onClick = {
-                    currentValue?.let { onMaxMessageLengthChange(it) }
+                    currentValue?.let {
+                        onMaxMessageLengthChange(it)
+                        isDirty = false
+                    }
                 },
-                enabled = isValid && isChanged,
+                enabled = isValid && isDirty,
                 modifier = Modifier.align(Alignment.End)
             ) {
                 Text("保存")
@@ -197,13 +200,18 @@ private fun BoardIdSettingCard(
     onBoardIdChange: (String) -> Unit,
     isServiceRunning: Boolean
 ) {
-    var textFieldValue by remember(boardId) { mutableStateOf(boardId) }
+    var textFieldValue by remember { mutableStateOf(boardId) }
+    var isDirty by remember { mutableStateOf(false) }
+
+    // 外部から値が変更されたら textFieldValue を更新し、dirty をリセット
+    LaunchedEffect(boardId) {
+        textFieldValue = boardId
+        isDirty = false
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Column(
@@ -217,7 +225,7 @@ private fun BoardIdSettingCard(
             )
 
             Text(
-                text = "読み上げる板の ID を入力してください (例: mamiko, sumire)",
+                text = "読み上げる板の ID を入力してください (例: mamiko)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -227,9 +235,9 @@ private fun BoardIdSettingCard(
                 onValueChange = { newValue ->
                     val filtered = newValue.filter { it.isLetterOrDigit() || it == '_' }
                     textFieldValue = filtered
+                    isDirty = true
                 },
                 label = { Text("板 ID") },
-                placeholder = { Text("mamiko") },
                 singleLine = true,
                 enabled = !isServiceRunning,
                 modifier = Modifier.fillMaxWidth(),
@@ -246,8 +254,11 @@ private fun BoardIdSettingCard(
             )
 
             Button(
-                onClick = { onBoardIdChange(textFieldValue) },
-                enabled = !isServiceRunning && textFieldValue.isNotBlank() && textFieldValue != boardId,
+                onClick = {
+                    onBoardIdChange(textFieldValue)
+                    isDirty = false
+                },
+                enabled = !isServiceRunning && textFieldValue.isNotBlank() && isDirty,
                 modifier = Modifier.align(Alignment.End)
             ) {
                 Text("保存")
