@@ -46,8 +46,8 @@ class JpnknVoxService : Service() {
     private var mqttManager: MqttManager? = null
     private var overlayManager: OverlayManager? = null
 
-    // 板 ID
-    private var boardId: String = "mamiko"
+    // 板 ID（Intent から設定される）
+    private var boardId: String = ""
 
     // メッセージ最大文字数
     private var maxMessageLength: Int = 100

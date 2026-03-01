@@ -29,7 +29,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isServiceRunning = mutableStateOf(false)
 
     /** 板 ID */
-    val boardId = mutableStateOf("mamiko")
+    val boardId = mutableStateOf("")
 
     /** オーバーレイ表示有効状態 */
     val isOverlayEnabled = mutableStateOf(true)
