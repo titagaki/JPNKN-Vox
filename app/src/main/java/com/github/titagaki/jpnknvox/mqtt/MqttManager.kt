@@ -7,13 +7,13 @@ import com.hivemq.client.mqtt.MqttClient
 import com.hivemq.client.mqtt.datatypes.MqttQos
 import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient
 import com.hivemq.client.mqtt.mqtt3.message.publish.Mqtt3Publish
-import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.*
 
 /**
  * MQTT 接続管理クラス
  *
  * - HiveMQ MQTT Client を使用した接続管理
- * - 自動再接続
+ * - 切断時の自動再接続（手動リトライ方式、認証情報を毎回送信）
  * - メッセージの受信とパース
  */
 class MqttManager(
@@ -30,6 +30,10 @@ class MqttManager(
     private var client: Mqtt3AsyncClient? = null
     private var isConnected = false
     private var currentTopic: String = AppConfig.Mqtt.DEFAULT_TOPIC
+
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var reconnectJob: Job? = null
+    private var isShuttingDown = false
 
     /**
      * 接続状態を取得
@@ -48,20 +52,6 @@ class MqttManager(
             .identifier(clientId)
             .serverHost(AppConfig.Mqtt.SERVER_HOST)
             .serverPort(AppConfig.Mqtt.SERVER_PORT)
-            .automaticReconnect()
-                .initialDelay(AppConfig.Mqtt.INITIAL_RETRY_DELAY_MS, TimeUnit.MILLISECONDS)
-                .maxDelay(AppConfig.Mqtt.MAX_RETRY_DELAY_MS, TimeUnit.MILLISECONDS)
-                .applyAutomaticReconnect()
-            .addConnectedListener {
-                Log.d(TAG, "Connected listener triggered")
-                isConnected = true
-                onConnected()
-            }
-            .addDisconnectedListener { context ->
-                Log.d(TAG, "Disconnected listener triggered: ${context.cause}")
-                isConnected = false
-                onDisconnected(context.cause)
-            }
             .buildAsync()
 
         Log.d(TAG, "MQTT client initialized with ID: $clientId")
@@ -74,7 +64,14 @@ class MqttManager(
      */
     fun connect(topic: String = AppConfig.Mqtt.DEFAULT_TOPIC) {
         currentTopic = topic
+        isShuttingDown = false
+        doConnect()
+    }
 
+    /**
+     * 実際の接続処理（再接続時も同じメソッドを使用）
+     */
+    private fun doConnect() {
         if (isConnected) {
             Log.d(TAG, "Already connected")
             return
@@ -88,19 +85,43 @@ class MqttManager(
             ?.password(AppConfig.Mqtt.PASSWORD.toByteArray())
             ?.applySimpleAuth()
             ?.keepAlive(60)
-            ?.cleanSession(false)
+            ?.cleanSession(true)
             ?.send()
             ?.whenComplete { _, throwable ->
                 if (throwable != null) {
                     Log.e(TAG, "Connection failed", throwable)
                     isConnected = false
                     onError("接続失敗: ${throwable.message}")
+                    onDisconnected(throwable)
+                    scheduleReconnect()
                 } else {
                     Log.d(TAG, "Connection successful")
                     isConnected = true
+                    onConnected()
                     subscribe(currentTopic)
                 }
             }
+    }
+
+    /**
+     * 再接続をスケジュール（指数バックオフ）
+     */
+    private var retryCount = 0
+
+    private fun scheduleReconnect() {
+        if (isShuttingDown) return
+
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            val delayMs = minOf(
+                AppConfig.Mqtt.INITIAL_RETRY_DELAY_MS * (1L shl retryCount.coerceAtMost(6)),
+                AppConfig.Mqtt.MAX_RETRY_DELAY_MS
+            )
+            Log.d(TAG, "Reconnecting in ${delayMs}ms (attempt ${retryCount + 1})")
+            delay(delayMs)
+            retryCount++
+            if (!isShuttingDown) doConnect()
+        }
     }
 
     /**
@@ -124,8 +145,35 @@ class MqttManager(
                     onError("トピック購読失敗: ${throwable.message}")
                 } else {
                     Log.d(TAG, "Subscribed to: $topic")
+                    retryCount = 0
+                    // 購読成功後、切断を監視するためにポーリング
+                    startDisconnectWatcher()
                 }
             }
+    }
+
+    /**
+     * 切断を検知して再接続をトリガーするウォッチャー
+     */
+    private var watcherJob: Job? = null
+
+    private fun startDisconnectWatcher() {
+        watcherJob?.cancel()
+        watcherJob = scope.launch {
+            while (isActive && !isShuttingDown) {
+                delay(5000)
+                val clientConnected = client?.state?.isConnected == true
+                if (!clientConnected && !isShuttingDown) {
+                    Log.d(TAG, "Disconnect detected by watcher")
+                    if (isConnected) {
+                        isConnected = false
+                        onDisconnected(null)
+                    }
+                    scheduleReconnect()
+                    break
+                }
+            }
+        }
     }
 
     /**
@@ -171,6 +219,10 @@ class MqttManager(
      * リソースを解放
      */
     fun shutdown() {
+        isShuttingDown = true
+        reconnectJob?.cancel()
+        watcherJob?.cancel()
+        scope.cancel()
         disconnect()
         client = null
         Log.d(TAG, "MQTT manager shutdown")
