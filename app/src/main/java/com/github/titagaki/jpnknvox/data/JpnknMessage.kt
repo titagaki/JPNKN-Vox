@@ -43,10 +43,22 @@ data class JpnknMessage(
      */
     fun extractMessage(): String {
         return if (parts.size >= 4) {
-            parts[3].trim().replace("<br>", "\n")
+            parts[3].trim()
+                .replace("<br>", "\n")
+                .unescapeHtml()
         } else {
             ""
         }
+    }
+
+    /**
+     * HTMLエスケープされた文字列をアンエスケープする
+     */
+    private fun String.unescapeHtml(): String {
+        return this
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&")  // &amp; は最後に処理（二重エスケープ対応）
     }
 
     /**
@@ -54,7 +66,7 @@ data class JpnknMessage(
      */
     fun extractName(): String {
         return if (parts.isNotEmpty()) {
-            parts[0].trim()
+            parts[0].trim().unescapeHtml()
         } else {
             "名無し"
         }
@@ -65,7 +77,7 @@ data class JpnknMessage(
      */
     fun extractMail(): String {
         return if (parts.size >= 2) {
-            parts[1].trim()
+            parts[1].trim().unescapeHtml()
         } else {
             ""
         }
@@ -76,7 +88,7 @@ data class JpnknMessage(
      */
     fun extractDate(): String {
         return if (parts.size >= 3) {
-            parts[2].trim()
+            parts[2].trim().unescapeHtml()
         } else {
             ""
         }

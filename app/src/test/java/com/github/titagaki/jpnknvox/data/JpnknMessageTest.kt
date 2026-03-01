@@ -249,5 +249,41 @@ class JpnknMessageTest {
         assertNotNull(restored)
         assertEquals(original, restored)
     }
-}
 
+    // ========================================
+    // HTMLエスケープのテスト
+    // ========================================
+
+    @Test
+    fun `extractMessage - HTMLエスケープされた文字をアンエスケープする`() {
+        val msg = JpnknMessage(
+            body = "名無し<>sage<>2024/01/01<>&lt;テスト&gt; &amp; アンパサンド<>",
+            no = "1",
+            bbsid = "mamiko",
+            threadkey = "12345"
+        )
+        assertEquals("<テスト> & アンパサンド", msg.extractMessage())
+    }
+
+    @Test
+    fun `extractName - HTMLエスケープされた名前をアンエスケープする`() {
+        val msg = JpnknMessage(
+            body = "&lt;匿名&gt;<>sage<>2024/01/01<>本文<>",
+            no = "1",
+            bbsid = "mamiko",
+            threadkey = "12345"
+        )
+        assertEquals("<匿名>", msg.extractName())
+    }
+
+    @Test
+    fun `extractMessage - brタグと混在したHTMLエスケープを正しく処理する`() {
+        val msg = JpnknMessage(
+            body = "名無し<>sage<>2024/01/01<>1行目&lt;テスト&gt;<br>2行目&amp;記号<>",
+            no = "1",
+            bbsid = "mamiko",
+            threadkey = "12345"
+        )
+        assertEquals("1行目<テスト>\n2行目&記号", msg.extractMessage())
+    }
+}
