@@ -23,7 +23,7 @@ android {
         minSdk = 31
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -86,7 +86,7 @@ tasks.register("renameDebugApk") {
     dependsOn("assembleDebug")
     doLast {
         val debugApk = file("build/outputs/apk/debug/app-debug.apk")
-        val renamedApk = file("build/outputs/apk/debug/JPNKNVox-debug-1.0.apk")
+        val renamedApk = file("build/outputs/apk/debug/JPNKNVox-debug-0.1.0.apk")
         if (debugApk.exists()) {
             debugApk.renameTo(renamedApk)
             println("APK renamed to: ${renamedApk.name}")
@@ -98,7 +98,7 @@ tasks.register("renameReleaseApk") {
     dependsOn("assembleRelease")
     doLast {
         val releaseApk = file("build/outputs/apk/release/app-release.apk")
-        val renamedApk = file("build/outputs/apk/release/JPNKNVox-release-1.0.apk")
+        val renamedApk = file("build/outputs/apk/release/JPNKNVox-release-0.1.0.apk")
         if (releaseApk.exists()) {
             releaseApk.renameTo(renamedApk)
             println("APK renamed to: ${renamedApk.name}")
