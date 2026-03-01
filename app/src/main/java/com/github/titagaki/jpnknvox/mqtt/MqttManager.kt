@@ -29,7 +29,7 @@ class MqttManager(
 
     private var client: Mqtt3AsyncClient? = null
     private var isConnected = false
-    private var currentTopic: String = AppConfig.Mqtt.DEFAULT_TOPIC
+    private var currentTopic: String = ""
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var reconnectJob: Job? = null
@@ -60,9 +60,9 @@ class MqttManager(
     /**
      * MQTT サーバーに接続
      *
-     * @param topic 購読するトピック（省略時はデフォルトトピック）
+     * @param topic 購読するトピック
      */
-    fun connect(topic: String = AppConfig.Mqtt.DEFAULT_TOPIC) {
+    fun connect(topic: String) {
         currentTopic = topic
         isShuttingDown = false
         doConnect()

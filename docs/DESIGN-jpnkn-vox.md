@@ -246,7 +246,7 @@ UI スイッチ OFF
 
   | キー | 型 | デフォルト値 |
   |---|---|---|
-  | `board_id` | `stringPreferencesKey` | `AppConfig.Mqtt.DEFAULT_TOPIC` から `bbs/` プレフィックスを除去した値 |
+  | `board_id` | `stringPreferencesKey` | `""` （空文字） |
   | `overlay_enabled` | `booleanPreferencesKey` | `true` |
   | `max_message_length` | `intPreferencesKey` | `100` |
 
@@ -400,7 +400,6 @@ sealed class Screen(route, title, icon)
 | `Mqtt` | `SERVER_PORT` | `1883` |
 | `Mqtt` | `USERNAME` | `genkai` |
 | `Mqtt` | `PASSWORD` | `7144` |
-| `Mqtt` | `DEFAULT_TOPIC` | `bbs/mamiko` |
 | `Mqtt` | `TOPIC_PREFIX` | `bbs/` |
 | `Mqtt` | `CLIENT_ID_PREFIX` | `jpnkn_vox_android` |
 | `Mqtt` | `INITIAL_RETRY_DELAY_MS` | `1000L` |

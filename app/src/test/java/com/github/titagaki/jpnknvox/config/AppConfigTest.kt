@@ -50,13 +50,6 @@ class AppConfigTest {
         assertEquals("bbs/", AppConfig.Mqtt.TOPIC_PREFIX)
     }
 
-    @Test
-    fun `Mqtt定数 - デフォルトトピックがプレフィックスで始まる`() {
-        assertTrue(
-            "DEFAULT_TOPIC は TOPIC_PREFIX で始まるべき",
-            AppConfig.Mqtt.DEFAULT_TOPIC.startsWith(AppConfig.Mqtt.TOPIC_PREFIX)
-        )
-    }
 
     @Test
     fun `Mqtt定数 - 再接続設定が妥当な範囲`() {

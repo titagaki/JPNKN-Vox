@@ -13,7 +13,6 @@ object AppConfig {
         const val SERVER_PORT = 1883
         const val USERNAME = "genkai"
         const val PASSWORD = "7144"
-        const val DEFAULT_TOPIC = "bbs/mamiko"
         const val TOPIC_PREFIX = "bbs/"
         const val CLIENT_ID_PREFIX = "jpnkn_vox_android"
 

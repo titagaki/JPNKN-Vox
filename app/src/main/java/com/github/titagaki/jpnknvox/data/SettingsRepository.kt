@@ -8,7 +8,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.github.titagaki.jpnknvox.config.AppConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -33,7 +32,7 @@ class SettingsRepository(private val context: Context) {
      */
     val boardIdFlow: Flow<String> = context.dataStore.data
         .map { preferences ->
-            preferences[BOARD_ID_KEY] ?: AppConfig.Mqtt.DEFAULT_TOPIC.removePrefix("bbs/")
+            preferences[BOARD_ID_KEY] ?: ""
         }
 
     /**
