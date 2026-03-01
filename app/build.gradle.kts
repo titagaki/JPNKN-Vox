@@ -1,6 +1,15 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+// local.properties から署名情報を読み込む
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
 }
 
 android {
@@ -19,9 +28,22 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file(localProperties.getProperty("KEYSTORE_FILE", "jpnknvox.jks"))
+            storePassword = localProperties.getProperty("KEYSTORE_PASSWORD", "")
+            keyAlias = localProperties.getProperty("KEY_ALIAS", "jpnknvox")
+            keyPassword = localProperties.getProperty("KEY_PASSWORD", "")
+        }
+    }
+
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -50,6 +72,31 @@ android {
                 "META-INF/notice.txt",
                 "META-INF/*.kotlin_module"
             )
+        }
+    }
+}
+
+// APKファイル名をリネームするタスク
+tasks.register("renameDebugApk") {
+    dependsOn("assembleDebug")
+    doLast {
+        val debugApk = file("build/outputs/apk/debug/app-debug.apk")
+        val renamedApk = file("build/outputs/apk/debug/JPNKNVox-debug-1.0.apk")
+        if (debugApk.exists()) {
+            debugApk.renameTo(renamedApk)
+            println("APK renamed to: ${renamedApk.name}")
+        }
+    }
+}
+
+tasks.register("renameReleaseApk") {
+    dependsOn("assembleRelease")
+    doLast {
+        val releaseApk = file("build/outputs/apk/release/app-release.apk")
+        val renamedApk = file("build/outputs/apk/release/JPNKNVox-release-1.0.apk")
+        if (releaseApk.exists()) {
+            releaseApk.renameTo(renamedApk)
+            println("APK renamed to: ${renamedApk.name}")
         }
     }
 }
