@@ -1,6 +1,8 @@
 package com.github.titagaki.jpnknvox.tts
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
@@ -22,8 +24,10 @@ class TtsManager(
 
     companion object {
         private const val TAG = "TtsManager"
+        private const val SPEECH_INTERVAL_MS = 500L
     }
 
+    private val handler = Handler(Looper.getMainLooper())
     private var tts: TextToSpeech? = TextToSpeech(context, this)
     private var isInitialized = false
     private var isSpeaking = false
@@ -76,14 +80,14 @@ class TtsManager(
             override fun onDone(utteranceId: String?) {
                 Log.d(TAG, "Speech completed: $utteranceId")
                 isSpeaking = false
-                processQueue()
+                handler.postDelayed({ processQueue() }, SPEECH_INTERVAL_MS)
             }
 
             @Suppress("OVERRIDE_DEPRECATION")
             override fun onError(utteranceId: String?) {
                 Log.e(TAG, "Speech error: $utteranceId")
                 isSpeaking = false
-                processQueue()
+                handler.postDelayed({ processQueue() }, SPEECH_INTERVAL_MS)
             }
         })
     }
@@ -156,6 +160,7 @@ class TtsManager(
      * リソースを解放
      */
     fun shutdown() {
+        handler.removeCallbacksAndMessages(null)
         stop()
         clearQueue()
         tts?.shutdown()
