@@ -1,8 +1,8 @@
 # 詳細設計書：JPNKN Vox for Android
 
-**バージョン**: 1.1  
-**作成日**: 2026-02-28  
-**最終更新**: 2026-03-01  
+**バージョン**: 1.2
+**作成日**: 2026-02-28
+**最終更新**: 2026-03-20
 **対応 SRS**: `docs/SRS-jpnkn-vox.md`
 
 ---
@@ -146,7 +146,7 @@ UI スイッチ OFF
 
   | フィールド | 型 | デフォルト |
   |---|---|---|
-  | `boardId` | `String` | `"mamiko"` |
+  | `boardId` | `String` | `""` （空文字、`onStartCommand` で Intent から設定される） |
   | `maxMessageLength` | `Int` | `100` |
 
 - **ライフサイクルと処理**:
@@ -166,7 +166,7 @@ UI スイッチ OFF
 
   onDestroy()
     ├─ instance = null
-    ├─ MessageManager.addSystemLog("停止中...")
+    ├─ MessageManager.addSystemLog("サービスを停止しています...")
     ├─ OverlayManager.remove()
     ├─ MqttManager.shutdown()
     └─ TtsManager.shutdown()
@@ -176,7 +176,7 @@ UI スイッチ OFF
 
   | メソッド | 処理 |
   |---|---|
-  | `applyOverlayEnabled(enabled: Boolean)` | `true` ならオーバーレイを再作成（接続状態も復元）、`false` なら `remove()` |
+  | `applyOverlayEnabled(enabled: Boolean)` | `true` ならオーバーレイを再作成（`mqttManager.connectionState` を確認し接続済み/切断状態を復元）、`false` なら `remove()` + `overlayManager = null` |
   | `applyMaxMessageLength(length: Int)` | `maxMessageLength` フィールドを更新 |
 
 - **コールバック**:
@@ -270,12 +270,13 @@ UI スイッチ OFF
   | QoS | `AT_MOST_ONCE`（QoS 0） |
   | クライアント ID | `AppConfig.Mqtt.CLIENT_ID_PREFIX` + `_` + 起動時刻（ms） |
 
-- **自動再接続**: 手動リトライ方式（指数バックオフ）
+- **自動再接続**: 手動リトライ方式（指数バックオフ、試行回数上限なし）
   - 初回遅延: `AppConfig.Mqtt.INITIAL_RETRY_DELAY_MS`（1000ms）
   - 最大遅延: `AppConfig.Mqtt.MAX_RETRY_DELAY_MS`（60000ms）
-  - バックオフ計算: `INITIAL_RETRY_DELAY_MS * 2^retryCount`（上限クランプ）
-  - 切断検知: 購読成功後に 5秒間隔のポーリングウォッチャー（`startDisconnectWatcher()`）を起動し、`client.state.isConnected == false` を検知したら `scheduleReconnect()` を呼び出す
+  - バックオフ計算: `INITIAL_RETRY_DELAY_MS * 2^min(retryCount, 6)`（指数が 6 を超えないようクランプし、さらに MAX_RETRY_DELAY_MS で上限クランプ）
+  - 切断検知: 購読成功後に 5秒間隔のポーリングウォッチャー（`startDisconnectWatcher()`）を起動し、`client.state.isConnected != true` を検知したら `scheduleReconnect()` を呼び出す
   - `isShuttingDown` フラグが `true` の場合は再接続をスキップ
+  - `AppConfig.Mqtt.MAX_RETRY_ATTEMPTS`（10）は AppConfig に定義されているが、現在の `MqttManager` では参照されていない（実質的に試行回数は無制限）
 
 - **メッセージ処理**: `handleMessage()` でバイト列 → `String` → `JpnknMessage.fromJson()` → コールバック
   - `extractMessage()` が空の場合はスキップ、パース失敗時は `onError` 通知
