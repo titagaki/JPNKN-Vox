@@ -25,6 +25,7 @@ class SettingsRepository(private val context: Context) {
         private val BOARD_ID_KEY = stringPreferencesKey("board_id")
         private val OVERLAY_ENABLED_KEY = booleanPreferencesKey("overlay_enabled")
         private val MAX_MESSAGE_LENGTH_KEY = intPreferencesKey("max_message_length")
+        private val OVERLAY_ALPHA_KEY = intPreferencesKey("overlay_alpha")
     }
 
     /**
@@ -49,6 +50,14 @@ class SettingsRepository(private val context: Context) {
     val maxMessageLengthFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[MAX_MESSAGE_LENGTH_KEY] ?: 100
+        }
+
+    /**
+     * オーバーレイ濃さを取得（Flow）。0〜100 の整数（%）
+     */
+    val overlayAlphaFlow: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[OVERLAY_ALPHA_KEY] ?: 80
         }
 
     /**
@@ -81,6 +90,17 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveMaxMessageLength(length: Int) {
         context.dataStore.edit { preferences ->
             preferences[MAX_MESSAGE_LENGTH_KEY] = length
+        }
+    }
+
+    /**
+     * オーバーレイ濃さを保存
+     *
+     * @param alpha 0〜100 の整数（%）
+     */
+    suspend fun saveOverlayAlpha(alpha: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[OVERLAY_ALPHA_KEY] = alpha
         }
     }
 }

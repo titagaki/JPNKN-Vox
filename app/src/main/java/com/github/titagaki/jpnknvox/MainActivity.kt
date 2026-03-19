@@ -206,6 +206,7 @@ fun JpnknVoxApp(
             composable(Screen.Settings.route) {
                 val isOverlayEnabled by viewModel.isOverlayEnabled
                 val maxMessageLength by viewModel.maxMessageLength
+                val overlayAlpha by viewModel.overlayAlpha
                 SettingsScreen(
                     boardId = boardId,
                     onBoardIdChange = { viewModel.updateBoardId(it) },
@@ -214,6 +215,8 @@ fun JpnknVoxApp(
                     hasOverlayPermission = hasOverlayPermission(),
                     isOverlayEnabled = isOverlayEnabled,
                     onOverlayEnabledChange = { viewModel.updateOverlayEnabled(it) },
+                    overlayAlpha = overlayAlpha,
+                    onOverlayAlphaChange = { viewModel.updateOverlayAlpha(it) },
                     maxMessageLength = maxMessageLength,
                     onMaxMessageLengthChange = { viewModel.updateMaxMessageLength(it) },
                     onRequestNotificationPermission = onRequestNotificationPermission,

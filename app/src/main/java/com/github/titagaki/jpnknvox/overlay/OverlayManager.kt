@@ -53,9 +53,10 @@ class OverlayManager(private val context: Context) {
     /**
      * オーバーレイウィンドウを作成
      *
+     * @param alpha 背景の濃さ（0〜100 の整数 %）
      * @return 作成に成功した場合 true
      */
-    fun create(): Boolean {
+    fun create(alpha: Int = 80): Boolean {
         if (!hasOverlayPermission()) {
             Log.w(TAG, "Overlay permission not granted")
             return false
@@ -69,7 +70,7 @@ class OverlayManager(private val context: Context) {
                 android.R.layout.simple_list_item_2,
                 null
             ).apply {
-                setBackgroundColor(Color.argb(200, 0, 0, 0))
+                setBackgroundColor(Color.argb(alpha * 255 / 100, 0, 0, 0))
                 setPadding(16, 8, 16, 8)
             }
 
@@ -194,6 +195,17 @@ class OverlayManager(private val context: Context) {
      */
     fun showNotConnected() {
         updateStatus("未接続", Color.RED)
+    }
+
+    /**
+     * オーバーレイ背景の濃さを更新
+     *
+     * @param alpha 0〜100 の整数（%）
+     */
+    fun updateAlpha(alpha: Int) {
+        mainHandler.post {
+            overlayView?.setBackgroundColor(Color.argb(alpha * 255 / 100, 0, 0, 0))
+        }
     }
 
     /**

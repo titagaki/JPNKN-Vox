@@ -35,6 +35,7 @@ class JpnknVoxService : Service() {
         private const val TAG = "JpnknVoxService"
         const val EXTRA_BOARD_ID = "extra_board_id"
         const val EXTRA_MAX_MESSAGE_LENGTH = "extra_max_message_length"
+        const val EXTRA_OVERLAY_ALPHA = "extra_overlay_alpha"
 
         /** 稼働中のインスタンス（設定の即時反映用） */
         var instance: JpnknVoxService? = null
@@ -52,6 +53,9 @@ class JpnknVoxService : Service() {
     // メッセージ最大文字数
     private var maxMessageLength: Int = 100
 
+    // オーバーレイ背景の濃さ（0〜100 %）
+    private var overlayAlpha: Int = 80
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -64,7 +68,7 @@ class JpnknVoxService : Service() {
 
         // オーバーレイマネージャーを初期化
         overlayManager = OverlayManager(this).also {
-            if (it.create()) {
+            if (it.create(overlayAlpha)) {
                 MessageManager.addSystemLog("オーバーレイを作成しました")
             }
         }
@@ -106,6 +110,13 @@ class JpnknVoxService : Service() {
             Log.d(TAG, "Max message length set to: $maxMessageLength")
         }
 
+        // オーバーレイ濃さを Intent から取得し、生成済みオーバーレイに反映
+        intent?.takeIf { it.hasExtra(EXTRA_OVERLAY_ALPHA) }?.let {
+            overlayAlpha = it.getIntExtra(EXTRA_OVERLAY_ALPHA, 80)
+            overlayManager?.updateAlpha(overlayAlpha)
+            Log.d(TAG, "Overlay alpha set to: $overlayAlpha")
+        }
+
         startForegroundServiceWithNotification()
         return START_STICKY
     }
@@ -139,7 +150,7 @@ class JpnknVoxService : Service() {
     fun applyOverlayEnabled(enabled: Boolean) {
         if (enabled) {
             if (overlayManager == null) {
-                overlayManager = OverlayManager(this).also { it.create() }
+                overlayManager = OverlayManager(this).also { it.create(overlayAlpha) }
                 // 再作成後に現在の接続状態を反映
                 if (mqttManager?.connectionState == true) {
                     overlayManager?.showConnected()
@@ -155,6 +166,11 @@ class JpnknVoxService : Service() {
 
     fun applyMaxMessageLength(length: Int) {
         maxMessageLength = length
+    }
+
+    fun applyOverlayAlpha(alpha: Int) {
+        overlayAlpha = alpha
+        overlayManager?.updateAlpha(alpha)
     }
 
     // ========================================

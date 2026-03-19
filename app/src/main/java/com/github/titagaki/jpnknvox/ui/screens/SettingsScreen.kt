@@ -28,6 +28,8 @@ fun SettingsScreen(
     hasOverlayPermission: Boolean,
     isOverlayEnabled: Boolean,
     onOverlayEnabledChange: (Boolean) -> Unit,
+    overlayAlpha: Int,
+    onOverlayAlphaChange: (Int) -> Unit,
     maxMessageLength: Int,
     onMaxMessageLengthChange: (Int) -> Unit,
     onRequestNotificationPermission: () -> Unit,
@@ -58,6 +60,8 @@ fun SettingsScreen(
         OverlaySettingCard(
             isOverlayEnabled = isOverlayEnabled,
             onOverlayEnabledChange = onOverlayEnabledChange,
+            overlayAlpha = overlayAlpha,
+            onOverlayAlphaChange = onOverlayAlphaChange,
             hasOverlayPermission = hasOverlayPermission
         )
 
@@ -142,6 +146,8 @@ private fun MessageLengthSettingCard(
 private fun OverlaySettingCard(
     isOverlayEnabled: Boolean,
     onOverlayEnabledChange: (Boolean) -> Unit,
+    overlayAlpha: Int,
+    onOverlayAlphaChange: (Int) -> Unit,
     hasOverlayPermission: Boolean
 ) {
     Card(
@@ -182,6 +188,23 @@ private fun OverlaySettingCard(
                     enabled = hasOverlayPermission
                 )
             }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "背景の濃さ: $overlayAlpha%",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            Slider(
+                value = overlayAlpha / 100f,
+                onValueChange = { onOverlayAlphaChange((it * 100).toInt()) },
+                enabled = hasOverlayPermission && isOverlayEnabled,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             if (!hasOverlayPermission) {
                 Text(

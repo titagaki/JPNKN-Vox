@@ -37,12 +37,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** メッセージ最大文字数 */
     val maxMessageLength = mutableStateOf(100)
 
+    /** オーバーレイ背景の濃さ（0〜100 %） */
+    val overlayAlpha = mutableStateOf(80)
+
     init {
         viewModelScope.launch {
             boardId.value = settingsRepository.boardIdFlow.first()
             isOverlayEnabled.value = settingsRepository.overlayEnabledFlow.first()
             maxMessageLength.value = settingsRepository.maxMessageLengthFlow.first()
-            Log.d(TAG, "Loaded board ID: ${boardId.value}, overlay enabled: ${isOverlayEnabled.value}, max message length: ${maxMessageLength.value}")
+            overlayAlpha.value = settingsRepository.overlayAlphaFlow.first()
+            Log.d(TAG, "Loaded board ID: ${boardId.value}, overlay enabled: ${isOverlayEnabled.value}, max message length: ${maxMessageLength.value}, overlay alpha: ${overlayAlpha.value}")
         }
     }
 
@@ -50,7 +54,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * サービスを開始
      */
     fun startService() {
-        serviceController.start(boardId.value, maxMessageLength.value)
+        serviceController.start(boardId.value, maxMessageLength.value, overlayAlpha.value)
         isServiceRunning.value = true
     }
 
@@ -97,5 +101,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         // サービスが稼働中であれば最大文字数を即時反映
         serviceController.setMaxMessageLength(length)
+    }
+
+    /**
+     * オーバーレイ背景の濃さを更新・保存
+     */
+    fun updateOverlayAlpha(alpha: Int) {
+        overlayAlpha.value = alpha
+        viewModelScope.launch {
+            settingsRepository.saveOverlayAlpha(alpha)
+            Log.d(TAG, "Saved overlay alpha: $alpha")
+        }
+        // サービスが稼働中であれば即時反映
+        serviceController.setOverlayAlpha(alpha)
     }
 }

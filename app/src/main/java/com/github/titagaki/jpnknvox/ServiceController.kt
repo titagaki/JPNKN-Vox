@@ -17,14 +17,15 @@ class ServiceController(private val application: Application) {
         private const val TAG = "ServiceController"
     }
 
-    fun start(boardId: String, maxMessageLength: Int = 100) {
+    fun start(boardId: String, maxMessageLength: Int = 100, overlayAlpha: Int = 80) {
         val intent = Intent(application, JpnknVoxService::class.java).apply {
             putExtra(JpnknVoxService.EXTRA_BOARD_ID, boardId)
             putExtra(JpnknVoxService.EXTRA_MAX_MESSAGE_LENGTH, maxMessageLength)
+            putExtra(JpnknVoxService.EXTRA_OVERLAY_ALPHA, overlayAlpha)
         }
         application.startForegroundService(intent)
         MessageManager.addSystemLog("サービスを開始しました (板: $boardId)")
-        Log.d(TAG, "JpnknVoxService started with board ID: $boardId, max message length: $maxMessageLength")
+        Log.d(TAG, "JpnknVoxService started with board ID: $boardId, max message length: $maxMessageLength, overlay alpha: $overlayAlpha")
     }
 
     fun stop() {
@@ -52,6 +53,16 @@ class ServiceController(private val application: Application) {
     fun setMaxMessageLength(length: Int) {
         JpnknVoxService.instance?.applyMaxMessageLength(length)
         Log.d(TAG, "Max message length set to: $length")
+    }
+
+    /**
+     * オーバーレイ背景の濃さをサービスに即時反映する
+     *
+     * @param alpha 0〜100 の整数（%）
+     */
+    fun setOverlayAlpha(alpha: Int) {
+        JpnknVoxService.instance?.applyOverlayAlpha(alpha)
+        Log.d(TAG, "Overlay alpha set to: $alpha")
     }
 }
 
