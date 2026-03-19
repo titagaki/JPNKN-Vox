@@ -53,11 +53,17 @@ app/src/main/java/com/github/titagaki/jpnknvox/
 # ユニットテスト
 ./gradlew testDebugUnitTest
 
+# クリーン + テスト
+./gradlew clean testDebugUnitTest
+
 # テストレポート
 # app/build/reports/tests/testDebugUnitTest/index.html
 ```
 
 出力APK名: `JPNKNVox-{debug|release}-0.1.0.apk`
+
+> Windows では `.\gradlew.bat` を使用。JAVA_HOME 未設定の場合:
+> `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`
 
 ## MQTT仕様
 
@@ -99,4 +105,5 @@ app/src/main/java/com/github/titagaki/jpnknvox/
 - `docs/SRS-jpnkn-vox.md` — ソフトウェア要件定義書
 - `docs/DESIGN-jpnkn-vox.md` — 設計書（クラス図・状態遷移図）
 - `docs/jpnkn-api-spec.md` — MQTT APIスペック
+- `docs/schema-jpnkn.json` — MQTT ペイロードの JSON スキーマ
 - `README.md` — ユーザー向けインストール・ビルド手順（日本語）
