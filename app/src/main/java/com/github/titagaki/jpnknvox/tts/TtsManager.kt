@@ -1,11 +1,13 @@
 package com.github.titagaki.jpnknvox.tts
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -18,6 +20,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
  */
 class TtsManager(
     context: Context,
+    private val coroutineScope: CoroutineScope,
     private val onInitialized: () -> Unit,
     private val onError: (String) -> Unit
 ) : TextToSpeech.OnInitListener {
@@ -27,7 +30,6 @@ class TtsManager(
         private const val SPEECH_INTERVAL_MS = 500L
     }
 
-    private val handler = Handler(Looper.getMainLooper())
     private var tts: TextToSpeech? = TextToSpeech(context, this)
     private var isInitialized = false
     private var isSpeaking = false
@@ -80,14 +82,20 @@ class TtsManager(
             override fun onDone(utteranceId: String?) {
                 Log.d(TAG, "Speech completed: $utteranceId")
                 isSpeaking = false
-                handler.postDelayed({ processQueue() }, SPEECH_INTERVAL_MS)
+                coroutineScope.launch(Dispatchers.Main) {
+                    delay(SPEECH_INTERVAL_MS)
+                    processQueue()
+                }
             }
 
             @Suppress("OVERRIDE_DEPRECATION")
             override fun onError(utteranceId: String?) {
                 Log.e(TAG, "Speech error: $utteranceId")
                 isSpeaking = false
-                handler.postDelayed({ processQueue() }, SPEECH_INTERVAL_MS)
+                coroutineScope.launch(Dispatchers.Main) {
+                    delay(SPEECH_INTERVAL_MS)
+                    processQueue()
+                }
             }
         })
     }
@@ -160,7 +168,6 @@ class TtsManager(
      * リソースを解放
      */
     fun shutdown() {
-        handler.removeCallbacksAndMessages(null)
         stop()
         clearQueue()
         tts?.shutdown()

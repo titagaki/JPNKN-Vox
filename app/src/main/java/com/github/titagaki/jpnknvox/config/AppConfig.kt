@@ -41,6 +41,10 @@ object AppConfig {
     object Overlay {
         const val MAX_MESSAGE_LENGTH = 30
         const val INITIAL_Y_POSITION = 100
+        const val STATUS_TEXT_SIZE = 14f
+        const val MESSAGE_TEXT_SIZE = 12f
+        const val PADDING_HORIZONTAL = 16
+        const val PADDING_VERTICAL = 8
     }
 }
 

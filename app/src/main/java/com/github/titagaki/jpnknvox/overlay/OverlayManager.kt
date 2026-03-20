@@ -77,7 +77,12 @@ class OverlayManager(private val context: Context) {
                 null
             ).apply {
                 setBackgroundColor(Color.argb(alpha * 255 / 100, 0, 0, 0))
-                setPadding(16, 8, 16, 8)
+                setPadding(
+                    AppConfig.Overlay.PADDING_HORIZONTAL,
+                    AppConfig.Overlay.PADDING_VERTICAL,
+                    AppConfig.Overlay.PADDING_HORIZONTAL,
+                    AppConfig.Overlay.PADDING_VERTICAL
+                )
             }
 
             // TextView を取得
@@ -87,13 +92,13 @@ class OverlayManager(private val context: Context) {
             statusTextView?.apply {
                 text = "待機中"
                 setTextColor(Color.WHITE)
-                textSize = 14f
+                textSize = AppConfig.Overlay.STATUS_TEXT_SIZE
             }
 
             messageTextView?.apply {
                 text = "サービス稼働中"
                 setTextColor(Color.LTGRAY)
-                textSize = 12f
+                textSize = AppConfig.Overlay.MESSAGE_TEXT_SIZE
             }
 
             // ウィンドウパラメータを設定

@@ -78,6 +78,7 @@ class JpnknVoxService : Service() {
         // TTS マネージャーを初期化
         ttsManager = TtsManager(
             context = this,
+            coroutineScope = serviceScope,
             onInitialized = { onTtsInitialized() },
             onError = { message ->
                 MessageManager.addSystemLog("TTS エラー: $message")
