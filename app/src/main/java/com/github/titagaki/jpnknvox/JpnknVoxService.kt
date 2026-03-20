@@ -17,6 +17,10 @@ import com.github.titagaki.jpnknvox.data.MessageManager
 import com.github.titagaki.jpnknvox.mqtt.MqttManager
 import com.github.titagaki.jpnknvox.overlay.OverlayManager
 import com.github.titagaki.jpnknvox.tts.TtsManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 /**
  * JPNKN Vox のバックグラウンドサービス
@@ -36,11 +40,10 @@ class JpnknVoxService : Service() {
         const val EXTRA_BOARD_ID = "extra_board_id"
         const val EXTRA_MAX_MESSAGE_LENGTH = "extra_max_message_length"
         const val EXTRA_OVERLAY_ALPHA = "extra_overlay_alpha"
-
-        /** 稼働中のインスタンス（設定の即時反映用） */
-        var instance: JpnknVoxService? = null
-            private set
+        const val EXTRA_OVERLAY_ENABLED = "extra_overlay_enabled"
     }
+
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // マネージャー
     private var ttsManager: TtsManager? = null
@@ -58,7 +61,6 @@ class JpnknVoxService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        instance = this
         Log.d(TAG, "Service onCreate")
 
         MessageManager.addSystemLog("サービスを初期化しています...")
@@ -84,6 +86,7 @@ class JpnknVoxService : Service() {
 
         // MQTT マネージャーを初期化
         mqttManager = MqttManager(
+            coroutineScope = serviceScope,
             onConnected = { onMqttConnected() },
             onDisconnected = { cause -> onMqttDisconnected(cause) },
             onMessageReceived = { message -> onMessageReceived(message) },
@@ -117,6 +120,12 @@ class JpnknVoxService : Service() {
             Log.d(TAG, "Overlay alpha set to: $overlayAlpha")
         }
 
+        // オーバーレイ有効/無効
+        intent?.takeIf { it.hasExtra(EXTRA_OVERLAY_ENABLED) }?.let {
+            applyOverlayEnabled(it.getBooleanExtra(EXTRA_OVERLAY_ENABLED, true))
+            Log.d(TAG, "Overlay enabled set to: ${it.getBooleanExtra(EXTRA_OVERLAY_ENABLED, true)}")
+        }
+
         startForegroundServiceWithNotification()
         return START_STICKY
     }
@@ -125,7 +134,6 @@ class JpnknVoxService : Service() {
 
     override fun onDestroy() {
         Log.d(TAG, "Service onDestroy")
-        instance = null
         MessageManager.addSystemLog("サービスを停止しています...")
 
         // オーバーレイを削除
@@ -140,6 +148,7 @@ class JpnknVoxService : Service() {
         ttsManager?.shutdown()
         ttsManager = null
 
+        serviceScope.cancel()
         super.onDestroy()
     }
 
@@ -147,16 +156,17 @@ class JpnknVoxService : Service() {
     // 設定の即時反映
     // ========================================
 
-    fun applyOverlayEnabled(enabled: Boolean) {
+    private fun applyOverlayEnabled(enabled: Boolean) {
         if (enabled) {
             if (overlayManager == null) {
                 overlayManager = OverlayManager(this).also { it.create(overlayAlpha) }
                 // 再作成後に現在の接続状態を反映
-                if (mqttManager?.connectionState == true) {
-                    overlayManager?.showConnected()
+                val status = if (mqttManager?.connectionState == true) {
+                    OverlayManager.ConnectionStatus.CONNECTED
                 } else {
-                    overlayManager?.showDisconnected()
+                    OverlayManager.ConnectionStatus.DISCONNECTED
                 }
+                overlayManager?.showStatus(status)
             }
         } else {
             overlayManager?.remove()
@@ -164,11 +174,11 @@ class JpnknVoxService : Service() {
         }
     }
 
-    fun applyMaxMessageLength(length: Int) {
+    private fun applyMaxMessageLength(length: Int) {
         maxMessageLength = length
     }
 
-    fun applyOverlayAlpha(alpha: Int) {
+    private fun applyOverlayAlpha(alpha: Int) {
         overlayAlpha = alpha
         overlayManager?.updateAlpha(alpha)
     }
@@ -193,13 +203,13 @@ class JpnknVoxService : Service() {
 
     private fun onMqttConnected() {
         MessageManager.addSystemLog("MQTT 接続成功")
-        overlayManager?.showConnected()
+        overlayManager?.showStatus(OverlayManager.ConnectionStatus.CONNECTED)
     }
 
     private fun onMqttDisconnected(cause: Throwable?) {
         val message = cause?.message ?: "不明な理由"
         MessageManager.addSystemLog("MQTT 切断: $message")
-        overlayManager?.showDisconnected()
+        overlayManager?.showStatus(OverlayManager.ConnectionStatus.DISCONNECTED)
     }
 
     private fun onMessageReceived(message: JpnknMessage) {

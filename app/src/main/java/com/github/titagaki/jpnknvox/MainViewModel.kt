@@ -2,10 +2,12 @@ package com.github.titagaki.jpnknvox
 
 import android.app.Application
 import android.util.Log
-import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.titagaki.jpnknvox.data.SettingsRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -25,28 +27,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
     private val serviceController = ServiceController(application)
 
-    /** サービス稼働状態 */
-    val isServiceRunning = mutableStateOf(false)
+    private val _isServiceRunning = MutableStateFlow(false)
+    val isServiceRunning: StateFlow<Boolean> = _isServiceRunning.asStateFlow()
 
-    /** 板 ID */
-    val boardId = mutableStateOf("")
+    private val _boardId = MutableStateFlow("")
+    val boardId: StateFlow<String> = _boardId.asStateFlow()
 
-    /** オーバーレイ表示有効状態 */
-    val isOverlayEnabled = mutableStateOf(true)
+    private val _isOverlayEnabled = MutableStateFlow(true)
+    val isOverlayEnabled: StateFlow<Boolean> = _isOverlayEnabled.asStateFlow()
 
-    /** メッセージ最大文字数 */
-    val maxMessageLength = mutableStateOf(100)
+    private val _maxMessageLength = MutableStateFlow(100)
+    val maxMessageLength: StateFlow<Int> = _maxMessageLength.asStateFlow()
 
-    /** オーバーレイ背景の濃さ（0〜100 %） */
-    val overlayAlpha = mutableStateOf(80)
+    private val _overlayAlpha = MutableStateFlow(80)
+    val overlayAlpha: StateFlow<Int> = _overlayAlpha.asStateFlow()
 
     init {
         viewModelScope.launch {
-            boardId.value = settingsRepository.boardIdFlow.first()
-            isOverlayEnabled.value = settingsRepository.overlayEnabledFlow.first()
-            maxMessageLength.value = settingsRepository.maxMessageLengthFlow.first()
-            overlayAlpha.value = settingsRepository.overlayAlphaFlow.first()
-            Log.d(TAG, "Loaded board ID: ${boardId.value}, overlay enabled: ${isOverlayEnabled.value}, max message length: ${maxMessageLength.value}, overlay alpha: ${overlayAlpha.value}")
+            _boardId.value = settingsRepository.boardIdFlow.first()
+            _isOverlayEnabled.value = settingsRepository.overlayEnabledFlow.first()
+            _maxMessageLength.value = settingsRepository.maxMessageLengthFlow.first()
+            _overlayAlpha.value = settingsRepository.overlayAlphaFlow.first()
+            Log.d(TAG, "Loaded board ID: ${_boardId.value}, overlay enabled: ${_isOverlayEnabled.value}, max message length: ${_maxMessageLength.value}, overlay alpha: ${_overlayAlpha.value}")
         }
     }
 
@@ -54,8 +56,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * サービスを開始
      */
     fun startService() {
-        serviceController.start(boardId.value, maxMessageLength.value, overlayAlpha.value)
-        isServiceRunning.value = true
+        serviceController.start(_boardId.value, _maxMessageLength.value, _overlayAlpha.value)
+        _isServiceRunning.value = true
     }
 
     /**
@@ -63,56 +65,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun stopService() {
         serviceController.stop()
-        isServiceRunning.value = false
+        _isServiceRunning.value = false
     }
 
     /**
      * 板 ID を更新・保存
      */
-    fun updateBoardId(newBoardId: String) {
-        boardId.value = newBoardId
-        viewModelScope.launch {
-            settingsRepository.saveBoardId(newBoardId)
-            Log.d(TAG, "Saved board ID: $newBoardId")
-        }
-    }
+    fun updateBoardId(newBoardId: String) =
+        updateAndSave(_boardId, newBoardId, settingsRepository::saveBoardId)
 
     /**
      * オーバーレイ有効状態を更新・保存
      */
-    fun updateOverlayEnabled(enabled: Boolean) {
-        isOverlayEnabled.value = enabled
-        viewModelScope.launch {
-            settingsRepository.saveOverlayEnabled(enabled)
-            Log.d(TAG, "Saved overlay enabled: $enabled")
+    fun updateOverlayEnabled(enabled: Boolean) =
+        updateAndSave(_isOverlayEnabled, enabled, settingsRepository::saveOverlayEnabled) {
+            serviceController.setOverlayEnabled(it)
         }
-        // サービスが稼働中であればオーバーレイを即時制御
-        serviceController.setOverlayEnabled(enabled)
-    }
 
     /**
      * メッセージ最大文字数を更新・保存
      */
-    fun updateMaxMessageLength(length: Int) {
-        maxMessageLength.value = length
-        viewModelScope.launch {
-            settingsRepository.saveMaxMessageLength(length)
-            Log.d(TAG, "Saved max message length: $length")
+    fun updateMaxMessageLength(length: Int) =
+        updateAndSave(_maxMessageLength, length, settingsRepository::saveMaxMessageLength) {
+            serviceController.setMaxMessageLength(it)
         }
-        // サービスが稼働中であれば最大文字数を即時反映
-        serviceController.setMaxMessageLength(length)
-    }
 
     /**
      * オーバーレイ背景の濃さを更新・保存
      */
-    fun updateOverlayAlpha(alpha: Int) {
-        overlayAlpha.value = alpha
-        viewModelScope.launch {
-            settingsRepository.saveOverlayAlpha(alpha)
-            Log.d(TAG, "Saved overlay alpha: $alpha")
+    fun updateOverlayAlpha(alpha: Int) =
+        updateAndSave(_overlayAlpha, alpha, settingsRepository::saveOverlayAlpha) {
+            serviceController.setOverlayAlpha(it)
         }
-        // サービスが稼働中であれば即時反映
-        serviceController.setOverlayAlpha(alpha)
+
+    private fun <T> updateAndSave(
+        flow: MutableStateFlow<T>,
+        value: T,
+        save: suspend (T) -> Unit,
+        applyToService: ((T) -> Unit)? = null
+    ) {
+        flow.value = value
+        viewModelScope.launch { save(value) }
+        applyToService?.invoke(value)
     }
 }

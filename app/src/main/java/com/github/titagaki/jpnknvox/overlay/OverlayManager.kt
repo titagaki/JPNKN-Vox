@@ -25,6 +25,12 @@ import com.github.titagaki.jpnknvox.config.AppConfig
  */
 class OverlayManager(private val context: Context) {
 
+    enum class ConnectionStatus(val label: String, val color: Int) {
+        CONNECTED("接続済み", Color.GREEN),
+        DISCONNECTED("切断", Color.YELLOW),
+        NOT_CONNECTED("未接続", Color.RED)
+    }
+
     companion object {
         private const val TAG = "OverlayManager"
     }
@@ -177,24 +183,10 @@ class OverlayManager(private val context: Context) {
     }
 
     /**
-     * 接続済み状態を表示
+     * 接続状態を表示
      */
-    fun showConnected() {
-        updateStatus("接続済み", Color.GREEN)
-    }
-
-    /**
-     * 切断状態を表示
-     */
-    fun showDisconnected() {
-        updateStatus("切断", Color.YELLOW)
-    }
-
-    /**
-     * 未接続状態を表示
-     */
-    fun showNotConnected() {
-        updateStatus("未接続", Color.RED)
+    fun showStatus(status: ConnectionStatus) {
+        updateStatus(status.label, status.color)
     }
 
     /**

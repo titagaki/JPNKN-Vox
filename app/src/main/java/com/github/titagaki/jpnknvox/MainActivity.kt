@@ -115,8 +115,8 @@ fun JpnknVoxApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val isServiceRunning by viewModel.isServiceRunning
-    val boardId by viewModel.boardId
+    val isServiceRunning by viewModel.isServiceRunning.collectAsState()
+    val boardId by viewModel.boardId.collectAsState()
 
     // MessageManager の StateFlow を直接 collect
     val systemLogs by MessageManager.systemLogs.collectAsState()
@@ -204,9 +204,9 @@ fun JpnknVoxApp(
             }
 
             composable(Screen.Settings.route) {
-                val isOverlayEnabled by viewModel.isOverlayEnabled
-                val maxMessageLength by viewModel.maxMessageLength
-                val overlayAlpha by viewModel.overlayAlpha
+                val isOverlayEnabled by viewModel.isOverlayEnabled.collectAsState()
+                val maxMessageLength by viewModel.maxMessageLength.collectAsState()
+                val overlayAlpha by viewModel.overlayAlpha.collectAsState()
                 SettingsScreen(
                     boardId = boardId,
                     onBoardIdChange = { viewModel.updateBoardId(it) },

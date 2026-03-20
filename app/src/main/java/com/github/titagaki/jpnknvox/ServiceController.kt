@@ -41,7 +41,9 @@ class ServiceController(private val application: Application) {
      * @param enabled true でオーバーレイを表示、false で非表示
      */
     fun setOverlayEnabled(enabled: Boolean) {
-        JpnknVoxService.instance?.applyOverlayEnabled(enabled)
+        val intent = Intent(application, JpnknVoxService::class.java)
+            .putExtra(JpnknVoxService.EXTRA_OVERLAY_ENABLED, enabled)
+        application.startService(intent)
         Log.d(TAG, "Overlay enabled set to: $enabled")
     }
 
@@ -51,7 +53,9 @@ class ServiceController(private val application: Application) {
      * @param length 最大文字数
      */
     fun setMaxMessageLength(length: Int) {
-        JpnknVoxService.instance?.applyMaxMessageLength(length)
+        val intent = Intent(application, JpnknVoxService::class.java)
+            .putExtra(JpnknVoxService.EXTRA_MAX_MESSAGE_LENGTH, length)
+        application.startService(intent)
         Log.d(TAG, "Max message length set to: $length")
     }
 
@@ -61,7 +65,9 @@ class ServiceController(private val application: Application) {
      * @param alpha 0〜100 の整数（%）
      */
     fun setOverlayAlpha(alpha: Int) {
-        JpnknVoxService.instance?.applyOverlayAlpha(alpha)
+        val intent = Intent(application, JpnknVoxService::class.java)
+            .putExtra(JpnknVoxService.EXTRA_OVERLAY_ALPHA, alpha)
+        application.startService(intent)
         Log.d(TAG, "Overlay alpha set to: $alpha")
     }
 }
