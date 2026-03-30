@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val appVersion = "0.1.1"
+val appVersion = "0.1.2"
 
 // local.properties から署名情報を読み込む
 val localProperties = Properties()
