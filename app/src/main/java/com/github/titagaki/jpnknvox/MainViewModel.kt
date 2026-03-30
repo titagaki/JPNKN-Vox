@@ -27,7 +27,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
     private val serviceController = ServiceController(application)
 
-    private val _isServiceRunning = MutableStateFlow(false)
+    private val _isServiceRunning = MutableStateFlow(JpnknVoxService.isRunning)
     val isServiceRunning: StateFlow<Boolean> = _isServiceRunning.asStateFlow()
 
     private val _boardId = MutableStateFlow("")
@@ -106,6 +106,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         flow.value = value
         viewModelScope.launch { save(value) }
-        applyToService?.invoke(value)
+        if (_isServiceRunning.value) {
+            applyToService?.invoke(value)
+        }
     }
 }

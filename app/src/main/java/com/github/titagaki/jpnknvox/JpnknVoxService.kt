@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import com.github.titagaki.jpnknvox.config.AppConfig
 import com.github.titagaki.jpnknvox.data.JpnknMessage
 import com.github.titagaki.jpnknvox.data.MessageManager
+import com.github.titagaki.jpnknvox.data.SettingsRepository
 import com.github.titagaki.jpnknvox.mqtt.MqttManager
 import com.github.titagaki.jpnknvox.overlay.OverlayManager
 import com.github.titagaki.jpnknvox.tts.TtsManager
@@ -21,6 +22,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 /**
  * JPNKN Vox のバックグラウンドサービス
@@ -41,6 +44,10 @@ class JpnknVoxService : Service() {
         const val EXTRA_MAX_MESSAGE_LENGTH = "extra_max_message_length"
         const val EXTRA_OVERLAY_ALPHA = "extra_overlay_alpha"
         const val EXTRA_OVERLAY_ENABLED = "extra_overlay_enabled"
+
+        /** サービスが現在稼働中かどうかを示すフラグ */
+        var isRunning: Boolean = false
+            private set
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -61,6 +68,7 @@ class JpnknVoxService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         Log.d(TAG, "Service onCreate")
 
         MessageManager.addSystemLog("サービスを初期化しています...")
@@ -68,7 +76,8 @@ class JpnknVoxService : Service() {
         // 通知チャンネルを作成
         createNotificationChannel()
 
-        // オーバーレイマネージャーを初期化
+        // DataStore から保存済みの alpha を読み込んでオーバーレイを作成
+        overlayAlpha = runBlocking { SettingsRepository(this@JpnknVoxService).overlayAlphaFlow.first() }
         overlayManager = OverlayManager(this).also {
             if (it.create(overlayAlpha)) {
                 MessageManager.addSystemLog("オーバーレイを作成しました")
@@ -134,6 +143,7 @@ class JpnknVoxService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        isRunning = false
         Log.d(TAG, "Service onDestroy")
         MessageManager.addSystemLog("サービスを停止しています...")
 
