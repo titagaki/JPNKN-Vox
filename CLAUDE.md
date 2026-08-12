@@ -6,7 +6,7 @@ JPNKN掲示板（bbs.jpnkn.com）のリアルタイムコメントをMQTTで受�
 IRL配信（屋外配信）での手放し運用を想定。
 
 **パッケージ名:** `com.github.titagaki.jpnknvox`
-**バージョン:** 0.1.2
+**バージョン:** 0.1.3
 **最小SDK:** Android 12 (API 31)
 
 ## 技術スタック
@@ -39,7 +39,8 @@ IRL配信（屋外配信）での手放し運用を想定。
 # app/build/reports/tests/testDebugUnitTest/index.html
 ```
 
-出力APK名: `JPNKNVox-{debug|release}-0.1.0.apk`
+出力APK名: `JPNKNVox-{debug|release}-{バージョン}.apk`
+（`assembleXxx` の直後は `app-{debug|release}.apk`。`renameDebugApk` / `renameReleaseApk` を実行するとリネームされる）
 
 > Windows では `.\gradlew.bat` を使用。JAVA_HOME 未設定の場合:
 > `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`
