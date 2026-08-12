@@ -5,7 +5,10 @@
       "Read(//mnt/c/Users/megan/AndroidStudioProjects/**)",
       "Bash(./gradlew assembleDebug)",
       "Bash(./gradlew.bat assembleDebug)",
-      "Bash(JAVA_HOME=\"C:/Program Files/Android/Android Studio/jbr\" ./gradlew.bat assembleDebug)"
+      "Bash(JAVA_HOME=\"C:/Program Files/Android/Android Studio/jbr\" ./gradlew.bat assembleDebug)",
+      "Skill(update-config)",
+      "Bash(git mv *)"
     ]
-  }
+  },
+  "model": "opus"
 }
