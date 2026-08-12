@@ -56,7 +56,11 @@ object AppConfig {
 
     // オーバーレイ設定
     object Overlay {
-        const val MAX_MESSAGE_LENGTH = 30
+        /** メッセージ表示の行数。受信内容によらず高さを固定するため常にこの行数を確保する */
+        const val MESSAGE_LINES = 2
+
+        /** オーバーレイに表示するメッセージの最大文字数（[MESSAGE_LINES] 行に収まる目安） */
+        const val MAX_MESSAGE_LENGTH = 60
 
         /** 背景の濃さの既定値（0〜100 %） */
         const val DEFAULT_ALPHA = 80
@@ -64,11 +68,30 @@ object AppConfig {
         /** メッセージの文字色の既定値（ARGB） */
         const val DEFAULT_TEXT_COLOR = 0xFFCCCCCC.toInt()
 
+        // 文字の視認性（縁取り・影）。固定 px にすると文字サイズを変えたとき破綻するため、
+        // すべて文字サイズに対する割合で持つ
+        /** 縁取りの幅 */
+        const val TEXT_STROKE_RATIO = 1f / 8f
+        /** 影のぼかし半径 */
+        const val TEXT_SHADOW_RADIUS_RATIO = 1f / 8f
+        /** 影を下にずらす量 */
+        const val TEXT_SHADOW_DY_RATIO = 1f / 16f
+        /** 縁取りの色 */
+        const val TEXT_STROKE_COLOR = 0xFF000000.toInt()
+        /** 影の色 */
+        const val TEXT_SHADOW_COLOR = 0x99000000.toInt()
+
         const val INITIAL_Y_POSITION = 100
-        const val STATUS_TEXT_SIZE = 14f
+
+        /** アプリ名（接続状態）の文字サイズ。コメントより控えめにする */
+        const val STATUS_TEXT_SIZE = 11f
         const val MESSAGE_TEXT_SIZE = 12f
-        const val PADDING_HORIZONTAL = 16
-        const val PADDING_VERTICAL = 8
+
+        /** 内側の余白（dp）。px で持つと画面密度によって見え方が変わるため dp で持つ */
+        const val PADDING_HORIZONTAL_DP = 12f
+        /** アプリ名の上。コメントより控えめな行なので詰める */
+        const val PADDING_TOP_DP = 4f
+        const val PADDING_BOTTOM_DP = 8f
     }
 }
 

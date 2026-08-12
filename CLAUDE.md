@@ -66,7 +66,7 @@ IRL配信（屋外配信）での手放し運用を想定。
 - `MessageManager` はSingletonで `StateFlow` を公開。サービスとUIの両方から参照する
 - `JpnknVoxService` が `MqttManager` / `TtsManager` / `OverlayManager` を統括する
 - メッセージログ・システムログともに最大500件で古いものから削除
-- オーバーレイ表示は最大30文字に切り詰め
+- オーバーレイ表示は最大60文字に切り詰め（表示は2行固定で、あふれた分は末尾を省略）
 
 ## ドキュメント
 
