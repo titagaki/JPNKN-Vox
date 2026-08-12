@@ -293,8 +293,13 @@ class JpnknVoxService : Service() {
         }
 
         MessageManager.addMessage(message)
-        overlayManager?.updateMessage(text)
-        ttsManager?.enqueue(ttsText)
+
+        // オーバーレイは受信時ではなく読み上げ開始時に更新する。
+        // 読み上げが詰まっているとき、表示だけ先に進んで
+        // 聞こえている内容と食い違うのを防ぐ
+        ttsManager?.enqueue(ttsText) {
+            overlayManager?.updateMessage(text)
+        }
     }
 
     // ========================================

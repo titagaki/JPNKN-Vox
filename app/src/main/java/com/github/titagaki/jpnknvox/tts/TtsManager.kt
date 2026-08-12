@@ -46,7 +46,19 @@ class TtsManager(
     private var volume: Int = volume
 
     // 読み上げキュー
-    private val speechQueue = ConcurrentLinkedQueue<String>()
+    private val speechQueue = ConcurrentLinkedQueue<SpeechItem>()
+
+    /**
+     * キューに積む 1 件分の読み上げ
+     *
+     * @param text 読み上げるテキスト
+     * @param onStart この発話を読み上げ始めるときに呼ばれる処理。
+     *   受信した順ではなく読み上げる順に表示を合わせたい呼び出し元が使う
+     */
+    private data class SpeechItem(
+        val text: String,
+        val onStart: (() -> Unit)? = null
+    )
 
     /**
      * TTS が初期化済みかどうか
@@ -168,14 +180,15 @@ class TtsManager(
      * テキストを読み上げキューに追加
      *
      * @param text 読み上げるテキスト
+     * @param onStart このテキストを読み上げ始めるときに呼ばれる処理
      */
-    fun enqueue(text: String) {
+    fun enqueue(text: String, onStart: (() -> Unit)? = null) {
         if (text.isBlank()) {
             Log.w(TAG, "Empty text, skipping")
             return
         }
 
-        speechQueue.offer(text)
+        speechQueue.offer(SpeechItem(text, onStart))
         Log.d(TAG, "Enqueued: $text (Queue size: ${speechQueue.size})")
 
         if (!isInitialized) {
@@ -201,16 +214,20 @@ class TtsManager(
             return
         }
 
-        val text = speechQueue.poll()
-        if (text != null) {
+        val item = speechQueue.poll()
+        if (item != null) {
             isSpeaking = true
+            // 読み上げ開始を知らせてから speak する。
+            // TTS の onStart を待つと、発話されないまま終わったときに
+            // 通知の機会がなくなるため、キューから取り出した時点で呼ぶ
+            item.onStart?.invoke()
             tts?.speak(
-                text,
+                item.text,
                 TextToSpeech.QUEUE_FLUSH,
                 createSpeechParams(),
                 System.currentTimeMillis().toString()
             )
-            Log.d(TAG, "Speaking: $text (Remaining: ${speechQueue.size})")
+            Log.d(TAG, "Speaking: ${item.text} (Remaining: ${speechQueue.size})")
         } else {
             Log.d(TAG, "Speech queue is empty")
         }
