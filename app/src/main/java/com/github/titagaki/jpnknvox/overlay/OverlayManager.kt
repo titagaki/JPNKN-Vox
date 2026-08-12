@@ -72,12 +72,12 @@ class OverlayManager(private val context: Context) {
      * オーバーレイウィンドウを作成
      *
      * @param alpha 背景の濃さ（0〜100 の整数 %）
-     * @param textColor メッセージの文字色（ARGB）
+     * @param textSizeSp メッセージの文字サイズ（sp）
      * @return 作成に成功した場合 true
      */
     fun create(
         alpha: Int = AppConfig.Overlay.DEFAULT_ALPHA,
-        textColor: Int = AppConfig.Overlay.DEFAULT_TEXT_COLOR
+        textSizeSp: Int = AppConfig.Overlay.DEFAULT_TEXT_SIZE
     ): Boolean {
         if (!hasOverlayPermission()) {
             Log.w(TAG, "Overlay permission not granted")
@@ -89,7 +89,7 @@ class OverlayManager(private val context: Context) {
 
             // 縁取り付きの TextView を 2 段に並べる
             statusTextView = OutlinedTextView(context).apply {
-                textSize = AppConfig.Overlay.STATUS_TEXT_SIZE
+                textSize = statusTextSizeOf(textSizeSp)
                 // フォント由来の上下の余白を落として、コメントとの間を詰める
                 includeFontPadding = false
             }
@@ -97,8 +97,8 @@ class OverlayManager(private val context: Context) {
             // 高さが受信内容で伸び縮みしないよう、行数を固定する
             messageTextView = OutlinedTextView(context).apply {
                 text = "サービス稼働中"
-                setTextColor(textColor)
-                textSize = AppConfig.Overlay.MESSAGE_TEXT_SIZE
+                setTextColor(AppConfig.Overlay.MESSAGE_TEXT_COLOR)
+                textSize = textSizeSp.toFloat()
                 minLines = AppConfig.Overlay.MESSAGE_LINES
                 maxLines = AppConfig.Overlay.MESSAGE_LINES
                 ellipsize = TextUtils.TruncateAt.END
@@ -109,24 +109,13 @@ class OverlayManager(private val context: Context) {
                 orientation = LinearLayout.VERTICAL
                 setBackgroundColor(Color.argb(alpha * 255 / 100, 0, 0, 0))
                 val paddingHorizontal = dpToPx(AppConfig.Overlay.PADDING_HORIZONTAL_DP)
-                setPadding(
-                    paddingHorizontal,
-                    dpToPx(AppConfig.Overlay.PADDING_TOP_DP),
-                    paddingHorizontal,
-                    dpToPx(AppConfig.Overlay.PADDING_BOTTOM_DP)
-                )
-                addView(statusTextView)
-                // アプリ名の下に付く縁取り・影ぶんの余白を相殺して、コメントを詰める
-                addView(
-                    messageTextView,
-                    LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                    ).apply {
-                        topMargin = -(statusTextView?.paddingBottom ?: 0)
-                    }
-                )
+                val paddingVertical = dpToPx(AppConfig.Overlay.PADDING_VERTICAL_DP)
+                setPadding(paddingHorizontal, paddingVertical, paddingHorizontal, paddingVertical)
+                addView(statusTextView, matchWidthLayoutParams())
+                addView(messageTextView, matchWidthLayoutParams())
             }
+
+            applyOutlinePaddingOffsets()
 
             applyStatus(ConnectionStatus.WAITING)
 
@@ -183,6 +172,43 @@ class OverlayManager(private val context: Context) {
                 }
                 else -> false
             }
+        }
+    }
+
+    /**
+     * メッセージの文字サイズから、アプリ名（接続状態）の文字サイズを求める
+     */
+    private fun statusTextSizeOf(messageTextSizeSp: Int): Float =
+        messageTextSizeSp * AppConfig.Overlay.STATUS_TEXT_SIZE_RATIO
+
+    /**
+     * 横幅いっぱいに広げる LayoutParams
+     */
+    private fun matchWidthLayoutParams() = LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams.MATCH_PARENT,
+        LinearLayout.LayoutParams.WRAP_CONTENT
+    )
+
+    /**
+     * 縁取り・影のぶんだけ TextView に付いている余白を、負のマージンで相殺する
+     *
+     * この余白がないと縁取りと影が切れるが、そのままでは
+     * 行間が空き、上下の見た目の余白も [AppConfig.Overlay.PADDING_VERTICAL_DP] と食い違う。
+     * 相殺してオーバーレイ自身の padding だけが余白として効くようにする。
+     *
+     * 余白は文字サイズに追従して変わるため、サイズを変えるたびに取り直す。
+     */
+    private fun applyOutlinePaddingOffsets() {
+        statusTextView?.let { status ->
+            val params = status.layoutParams as? LinearLayout.LayoutParams ?: return@let
+            params.topMargin = -status.paddingTop
+            status.layoutParams = params
+        }
+        messageTextView?.let { message ->
+            val params = message.layoutParams as? LinearLayout.LayoutParams ?: return@let
+            params.topMargin = -(statusTextView?.paddingBottom ?: 0)
+            params.bottomMargin = -message.paddingBottom
+            message.layoutParams = params
         }
     }
 
@@ -247,13 +273,15 @@ class OverlayManager(private val context: Context) {
     }
 
     /**
-     * オーバーレイメッセージの文字色を更新
+     * オーバーレイの文字サイズを更新
      *
-     * @param color ARGB の整数
+     * @param textSizeSp メッセージの文字サイズ（sp）
      */
-    fun updateTextColor(color: Int) {
+    fun updateTextSize(textSizeSp: Int) {
         mainHandler.post {
-            messageTextView?.setTextColor(color)
+            statusTextView?.textSize = statusTextSizeOf(textSizeSp)
+            messageTextView?.textSize = textSizeSp.toFloat()
+            applyOutlinePaddingOffsets()
         }
     }
 

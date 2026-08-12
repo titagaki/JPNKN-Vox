@@ -43,7 +43,7 @@ class JpnknVoxService : Service() {
         const val EXTRA_BOARD_ID = "extra_board_id"
         const val EXTRA_MAX_MESSAGE_LENGTH = "extra_max_message_length"
         const val EXTRA_OVERLAY_ALPHA = "extra_overlay_alpha"
-        const val EXTRA_OVERLAY_TEXT_COLOR = "extra_overlay_text_color"
+        const val EXTRA_OVERLAY_TEXT_SIZE = "extra_overlay_text_size"
         const val EXTRA_OVERLAY_ENABLED = "extra_overlay_enabled"
         const val EXTRA_SPEECH_RATE = "extra_speech_rate"
         const val EXTRA_SPEECH_VOLUME = "extra_speech_volume"
@@ -69,8 +69,8 @@ class JpnknVoxService : Service() {
     // オーバーレイ背景の濃さ（0〜100 %）
     private var overlayAlpha: Int = AppConfig.Overlay.DEFAULT_ALPHA
 
-    // オーバーレイメッセージの文字色（ARGB）
-    private var overlayTextColor: Int = AppConfig.Overlay.DEFAULT_TEXT_COLOR
+    // オーバーレイの文字サイズ（sp）
+    private var overlayTextSize: Int = AppConfig.Overlay.DEFAULT_TEXT_SIZE
 
     // 話す速度（100 で等倍の百分率）
     private var speechRate: Int = AppConfig.Tts.DEFAULT_SPEECH_RATE
@@ -92,13 +92,13 @@ class JpnknVoxService : Service() {
         val settingsRepository = SettingsRepository(this)
         runBlocking {
             overlayAlpha = settingsRepository.overlayAlphaFlow.first()
-            overlayTextColor = settingsRepository.overlayTextColorFlow.first()
+            overlayTextSize = settingsRepository.overlayTextSizeFlow.first()
             speechRate = settingsRepository.speechRateFlow.first()
             speechVolume = settingsRepository.speechVolumeFlow.first()
         }
 
         overlayManager = OverlayManager(this).also {
-            if (it.create(overlayAlpha, overlayTextColor)) {
+            if (it.create(overlayAlpha, overlayTextSize)) {
                 MessageManager.addSystemLog("オーバーレイを作成しました")
             }
         }
@@ -152,12 +152,12 @@ class JpnknVoxService : Service() {
             Log.d(TAG, "Overlay alpha set to: $overlayAlpha")
         }
 
-        // オーバーレイ文字色を Intent から取得し、生成済みオーバーレイに反映
-        intent?.takeIf { it.hasExtra(EXTRA_OVERLAY_TEXT_COLOR) }?.let {
-            overlayTextColor =
-                it.getIntExtra(EXTRA_OVERLAY_TEXT_COLOR, AppConfig.Overlay.DEFAULT_TEXT_COLOR)
-            overlayManager?.updateTextColor(overlayTextColor)
-            Log.d(TAG, "Overlay text color set to: $overlayTextColor")
+        // オーバーレイ文字サイズを Intent から取得し、生成済みオーバーレイに反映
+        intent?.takeIf { it.hasExtra(EXTRA_OVERLAY_TEXT_SIZE) }?.let {
+            overlayTextSize =
+                it.getIntExtra(EXTRA_OVERLAY_TEXT_SIZE, AppConfig.Overlay.DEFAULT_TEXT_SIZE)
+            overlayManager?.updateTextSize(overlayTextSize)
+            Log.d(TAG, "Overlay text size set to: $overlayTextSize")
         }
 
         // 話す速度を Intent から取得し、TTS に反映
@@ -228,7 +228,7 @@ class JpnknVoxService : Service() {
         if (enabled) {
             if (overlayManager == null) {
                 overlayManager = OverlayManager(this).also {
-                    it.create(overlayAlpha, overlayTextColor)
+                    it.create(overlayAlpha, overlayTextSize)
                 }
                 // 再作成後に現在の接続状態を反映
                 val status = if (mqttManager?.connectionState == true) {

@@ -65,8 +65,8 @@ object AppConfig {
         /** 背景の濃さの既定値（0〜100 %） */
         const val DEFAULT_ALPHA = 80
 
-        /** メッセージの文字色の既定値（ARGB） */
-        const val DEFAULT_TEXT_COLOR = 0xFFCCCCCC.toInt()
+        /** メッセージの文字色（ARGB） */
+        const val MESSAGE_TEXT_COLOR = 0xFFF5F5F5.toInt()
 
         // 文字の視認性（縁取り・影）。固定 px にすると文字サイズを変えたとき破綻するため、
         // すべて文字サイズに対する割合で持つ
@@ -83,15 +83,19 @@ object AppConfig {
 
         const val INITIAL_Y_POSITION = 100
 
-        /** アプリ名（接続状態）の文字サイズ。コメントより控えめにする */
-        const val STATUS_TEXT_SIZE = 11f
-        const val MESSAGE_TEXT_SIZE = 12f
+        /** メッセージの文字サイズの既定値（sp）。設定画面の選択肢「中」に対応する */
+        const val DEFAULT_TEXT_SIZE = 12
+
+        /**
+         * アプリ名（接続状態）の文字サイズ。メッセージの文字サイズに対する割合
+         *
+         * コメントより控えめにしつつ、文字サイズを変えても比率が崩れないようにする。
+         */
+        const val STATUS_TEXT_SIZE_RATIO = 11f / 12f
 
         /** 内側の余白（dp）。px で持つと画面密度によって見え方が変わるため dp で持つ */
         const val PADDING_HORIZONTAL_DP = 12f
-        /** アプリ名の上。コメントより控えめな行なので詰める */
-        const val PADDING_TOP_DP = 4f
-        const val PADDING_BOTTOM_DP = 8f
+        const val PADDING_VERTICAL_DP = 6f
     }
 }
 

@@ -1,43 +1,34 @@
 package com.github.titagaki.jpnknvox.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.github.titagaki.jpnknvox.config.AppConfig
 
 /**
- * オーバーレイの文字色として選べる色（ARGB と表示名）
+ * オーバーレイの文字の大きさとして選べる段階（sp と表示名）
+ *
+ * 既定値の [AppConfig.Overlay.DEFAULT_TEXT_SIZE] は「中」に対応する。
  */
-private val TEXT_COLOR_PRESETS: List<Pair<Int, String>> = listOf(
-    0xFFFFFFFF.toInt() to "白",
-    0xFFCCCCCC.toInt() to "ライトグレー",
-    0xFF000000.toInt() to "黒",
-    0xFFFFEB3B.toInt() to "黄",
-    0xFFFF9800.toInt() to "オレンジ",
-    0xFFFF5252.toInt() to "赤",
-    0xFFFF80AB.toInt() to "ピンク",
-    0xFF8BC34A.toInt() to "黄緑",
-    0xFF4FC3F7.toInt() to "水色",
-    0xFFB388FF.toInt() to "紫"
+private val TEXT_SIZE_PRESETS: List<Pair<Int, String>> = listOf(
+    10 to "小",
+    12 to "中",
+    16 to "大",
+    22 to "特大"
 )
 
 /**
@@ -57,8 +48,8 @@ fun SettingsScreen(
     onOverlayEnabledChange: (Boolean) -> Unit,
     overlayAlpha: Int,
     onOverlayAlphaChange: (Int) -> Unit,
-    overlayTextColor: Int,
-    onOverlayTextColorChange: (Int) -> Unit,
+    overlayTextSize: Int,
+    onOverlayTextSizeChange: (Int) -> Unit,
     maxMessageLength: Int,
     onMaxMessageLengthChange: (Int) -> Unit,
     speechRate: Int,
@@ -74,7 +65,7 @@ fun SettingsScreen(
 ) {
     var showBoardIdDialog by remember { mutableStateOf(false) }
     var showMaxLengthDialog by remember { mutableStateOf(false) }
-    var showTextColorDialog by remember { mutableStateOf(false) }
+    var showTextSizeDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -165,12 +156,12 @@ fun SettingsScreen(
             valueLabel = { "$it%" },
             onValueChangeFinished = onOverlayAlphaChange
         )
-        ColorSettingRow(
-            title = "文字の色",
-            subtitle = "オーバーレイに表示するコメントの色",
-            color = overlayTextColor,
+        SettingRow(
+            title = "文字の大きさ",
+            subtitle = "オーバーレイに表示するコメントの大きさ",
+            value = textSizeLabel(overlayTextSize),
             enabled = hasOverlayPermission && isOverlayEnabled,
-            onClick = { showTextColorDialog = true }
+            onClick = { showTextSizeDialog = true }
         )
 
         // ========== 動作 ==========
@@ -219,14 +210,15 @@ fun SettingsScreen(
         )
     }
 
-    if (showTextColorDialog) {
-        ColorPickerDialog(
-            title = "文字の色",
-            selectedColor = overlayTextColor,
-            onDismiss = { showTextColorDialog = false },
+    if (showTextSizeDialog) {
+        ChoiceDialog(
+            title = "文字の大きさ",
+            choices = TEXT_SIZE_PRESETS,
+            selected = overlayTextSize,
+            onDismiss = { showTextSizeDialog = false },
             onSelect = {
-                onOverlayTextColorChange(it)
-                showTextColorDialog = false
+                onOverlayTextSizeChange(it)
+                showTextSizeDialog = false
             }
         )
     }
@@ -383,79 +375,42 @@ private fun SwitchSettingRow(
 }
 
 /**
- * 現在の色を丸いスウォッチで示す設定行。タップで色の選択ダイアログを開く
+ * 決まった段階から 1 つ選ぶダイアログ。選んだ時点で確定する
+ *
+ * @param choices 値と表示名の組
  */
 @Composable
-private fun ColorSettingRow(
+private fun <T> ChoiceDialog(
     title: String,
-    subtitle: String?,
-    color: Int,
-    onClick: () -> Unit,
-    enabled: Boolean = true
-) {
-    val contentAlpha = if (enabled) 1f else 0.38f
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = contentAlpha)
-            )
-            if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha),
-                    modifier = Modifier.padding(top = 3.dp)
-                )
-            }
-        }
-        Text(
-            text = colorLabel(color),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = contentAlpha)
-        )
-        ColorSwatch(color = color, alpha = contentAlpha)
-    }
-}
-
-/**
- * 色を選ぶダイアログ。選んだ時点で確定する
- */
-@Composable
-private fun ColorPickerDialog(
-    title: String,
-    selectedColor: Int,
+    choices: List<Pair<T, String>>,
+    selected: T,
     onDismiss: () -> Unit,
-    onSelect: (Int) -> Unit
+    onSelect: (T) -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                TEXT_COLOR_PRESETS.chunked(5).forEach { rowColors ->
+            Column {
+                choices.forEach { (value, label) ->
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        rowColors.forEach { (colorValue, label) ->
-                            ColorSwatch(
-                                color = colorValue,
-                                selected = colorValue == selectedColor,
-                                contentDescription = label,
-                                size = 44.dp,
-                                modifier = Modifier.clickable { onSelect(colorValue) }
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = value == selected,
+                                role = Role.RadioButton,
+                                onClick = { onSelect(value) }
                             )
-                        }
+                            .padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = value == selected,
+                            // 行全体で選択を受けるため、ボタン自体はクリックを受けない
+                            onClick = null
+                        )
+                        Text(text = label, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
             }
@@ -469,48 +424,10 @@ private fun ColorPickerDialog(
 }
 
 /**
- * 色見本。選択中はチェックを重ねて表示する
+ * 文字サイズに対応する表示名。段階にない値は sp で表す
  */
-@Composable
-private fun ColorSwatch(
-    color: Int,
-    modifier: Modifier = Modifier,
-    alpha: Float = 1f,
-    selected: Boolean = false,
-    contentDescription: String? = null,
-    size: Dp = 24.dp
-) {
-    val swatchColor = Color(color)
-
-    Box(
-        modifier = modifier
-            .size(size)
-            .background(color = swatchColor.copy(alpha = swatchColor.alpha * alpha), shape = CircleShape)
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outline.copy(alpha = alpha),
-                shape = CircleShape
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        if (selected) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = contentDescription,
-                // 明るい色の上では黒、暗い色の上では白でチェックを描く
-                tint = if (swatchColor.luminance() > 0.5f) Color.Black else Color.White,
-                modifier = Modifier.size(size * 0.6f)
-            )
-        }
-    }
-}
-
-/**
- * 色に対応する表示名。プリセットにない色は 16 進数で表す
- */
-private fun colorLabel(color: Int): String =
-    TEXT_COLOR_PRESETS.firstOrNull { it.first == color }?.second
-        ?: "#%06X".format(color and 0xFFFFFF)
+private fun textSizeLabel(textSize: Int): String =
+    TEXT_SIZE_PRESETS.firstOrNull { it.first == textSize }?.second ?: "${textSize}sp"
 
 /**
  * スライダー付きの設定行
