@@ -109,8 +109,12 @@ class OverlayManager(private val context: Context) {
                 orientation = LinearLayout.VERTICAL
                 setBackgroundColor(Color.argb(alpha * 255 / 100, 0, 0, 0))
                 val paddingHorizontal = dpToPx(AppConfig.Overlay.PADDING_HORIZONTAL_DP)
-                val paddingVertical = dpToPx(AppConfig.Overlay.PADDING_VERTICAL_DP)
-                setPadding(paddingHorizontal, paddingVertical, paddingHorizontal, paddingVertical)
+                setPadding(
+                    paddingHorizontal,
+                    dpToPx(AppConfig.Overlay.PADDING_TOP_DP),
+                    paddingHorizontal,
+                    dpToPx(AppConfig.Overlay.PADDING_BOTTOM_DP)
+                )
                 addView(statusTextView, matchWidthLayoutParams())
                 addView(messageTextView, matchWidthLayoutParams())
             }
@@ -193,7 +197,8 @@ class OverlayManager(private val context: Context) {
      * 縁取り・影のぶんだけ TextView に付いている余白を、負のマージンで相殺する
      *
      * この余白がないと縁取りと影が切れるが、そのままでは
-     * 行間が空き、上下の見た目の余白も [AppConfig.Overlay.PADDING_VERTICAL_DP] と食い違う。
+     * 行間が空き、上下の見た目の余白も [AppConfig.Overlay.PADDING_TOP_DP] /
+     * [AppConfig.Overlay.PADDING_BOTTOM_DP] と食い違う。
      * 相殺してオーバーレイ自身の padding だけが余白として効くようにする。
      *
      * 余白は文字サイズに追従して変わるため、サイズを変えるたびに取り直す。

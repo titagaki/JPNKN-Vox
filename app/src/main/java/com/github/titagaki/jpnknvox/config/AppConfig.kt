@@ -95,7 +95,15 @@ object AppConfig {
 
         /** 内側の余白（dp）。px で持つと画面密度によって見え方が変わるため dp で持つ */
         const val PADDING_HORIZONTAL_DP = 12f
-        const val PADDING_VERTICAL_DP = 6f
+
+        /**
+         * 上下の内側の余白（dp）
+         *
+         * 上下で値が違うのは、下側だけ最終行の descent（文字の下に伸びる部分）が
+         * 余白に上乗せされるため。同じ値にすると下が広く見える。
+         */
+        const val PADDING_TOP_DP = 3f
+        const val PADDING_BOTTOM_DP = 6f
     }
 }
 
