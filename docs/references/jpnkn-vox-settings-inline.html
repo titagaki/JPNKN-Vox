@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JPNKN Vox 設定画面モックアップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --pri:#0B57D0;
+  --pri-cont:#DDE3F8;
+  --on-pri-cont:#0A2E70;
+  --surf:#FAF9FD;
+  --on-surf:#1B1B1F;
+  --on-surf-var:#5A5C63;
+  --outline:#C6C6CE;
+  --line:#E4E3EA;
+  --ok:#146C2E;
+  --warn:#6E4F00;
+  --warn-cont:#FFE08C;
+  --err:#B3261E;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:32px 16px 48px;background:#4A4C52;
+  font-family:"Noto Sans JP",system-ui,sans-serif;
+  display:flex;flex-direction:column;align-items:center;gap:16px;
+}
+.caption{font-size:13px;color:#C3C3CB;text-align:center;line-height:1.7;max-width:390px}
+.phone{
+  width:390px;height:800px;background:var(--surf);color:var(--on-surf);
+  border-radius:32px;overflow:hidden;position:relative;
+  box-shadow:0 0 0 10px #26282D,0 18px 46px rgba(0,0,0,.45);
+  display:flex;flex-direction:column;
+}
+.statusbar{
+  height:30px;flex:none;background:var(--pri-cont);color:var(--on-pri-cont);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;font-size:12px;font-weight:500;
+}
+.appbar{
+  flex:none;background:var(--pri-cont);padding:12px 16px 16px;
+  display:flex;align-items:center;gap:14px;
+}
+.appbar .brand{font-size:20px;font-weight:700;color:var(--pri);flex:1}
+.runstate{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--on-pri-cont);cursor:pointer}
+.rdot{width:9px;height:9px;border-radius:50%;background:#8E9099}
+.rdot.on{background:var(--ok)}
+.screen{flex:1;overflow-y:auto;overscroll-behavior:contain}
+.screen::-webkit-scrollbar{width:0}
+
+.banner{
+  display:flex;align-items:center;gap:12px;padding:14px 16px;
+  background:var(--warn-cont);color:var(--warn);cursor:pointer;
+}
+.banner .ms{font-size:22px}
+.banner .s{font-size:12px;margin-top:2px}
+.sechead{padding:18px 16px 6px;font-size:12px;font-weight:500;color:var(--pri)}
+.sechead.tl{border-top:1px solid var(--line);margin-top:8px}
+.row{
+  display:flex;align-items:center;gap:12px;padding:12px 16px;
+  width:100%;border:none;background:none;font:inherit;color:inherit;
+  text-align:left;cursor:pointer;
+}
+.row:active{background:#EFEEF4}
+.row .grow{flex:1;min-width:0}
+.row .t{font-size:16px}
+.row .s{font-size:12px;color:var(--on-surf-var);margin-top:3px;line-height:1.5}
+.row .s.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.row .v{font-size:15px;color:var(--on-surf-var);white-space:nowrap}
+.row .accent{width:4px;height:36px;border-radius:2px;flex:none}
+.state{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--on-surf-var);white-space:nowrap}
+.state.ok{color:var(--ok)}
+.state.wait{color:var(--warn)}
+.state .ms{font-size:14px}
+.addrow{
+  display:flex;align-items:center;gap:12px;padding:12px 16px;width:100%;
+  border:none;background:none;font:inherit;font-size:15px;color:var(--pri);
+  text-align:left;cursor:pointer;
+}
+.addrow:active{background:#EFEEF4}
+.addrow .ms{font-size:20px;margin-left:2px}
+
+.slider{padding:12px 16px 14px}
+.slider .top{display:flex;justify-content:space-between;align-items:baseline}
+.slider .top .l{font-size:16px}
+.slider .top .v{font-size:15px;color:var(--on-surf-var)}
+input[type=range]{width:100%;height:22px;margin:8px 0 0;-webkit-appearance:none;background:transparent}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--pri-cont)}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:20px;height:20px;border-radius:50%;
+  background:var(--pri);margin-top:-8px;border:none;
+}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--pri-cont)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-radius:50%;background:var(--pri)}
+.switch{
+  width:52px;height:32px;border-radius:16px;background:#8E9099;position:relative;
+  border:none;padding:0;flex:none;cursor:pointer;transition:background .18s;
+}
+.switch i{position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .18s}
+.switch.on{background:var(--pri)}
+.switch.on i{left:24px}
+.testbtn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:calc(100% - 32px);margin:6px 16px 18px;padding:12px;
+  border-radius:100px;border:1px solid var(--outline);background:none;
+  font:inherit;font-size:15px;font-weight:500;color:var(--pri);cursor:pointer;
+}
+.testbtn:active{background:var(--pri-cont)}
+.pad{height:16px}
+
+.scrim{
+  position:absolute;inset:0;background:rgba(0,0,0,.4);opacity:0;pointer-events:none;
+  transition:opacity .2s;z-index:10;
+}
+.scrim.show{opacity:1;pointer-events:auto}
+.sheet{
+  position:absolute;left:0;right:0;bottom:0;background:var(--surf);
+  border-radius:28px 28px 0 0;padding:8px 0 24px;z-index:11;
+  transform:translateY(102%);transition:transform .24s cubic-bezier(.2,0,0,1);
+  max-height:92%;overflow-y:auto;
+}
+.sheet.show{transform:none}
+.sheet::-webkit-scrollbar{width:0}
+.grab{width:32px;height:4px;border-radius:2px;background:var(--outline);margin:4px auto 14px}
+.sheet h3{margin:0 0 4px;padding:0 20px;font-size:20px;font-weight:500}
+.sheet .lead{margin:0 0 8px;padding:0 20px;font-size:13px;color:var(--on-surf-var);line-height:1.7}
+.flabel{padding:16px 20px 6px;font-size:12px;color:var(--on-surf-var)}
+.seg{display:flex;gap:8px;padding:0 20px}
+.seg button{
+  flex:1;padding:10px 4px;border-radius:10px;border:1px solid var(--outline);
+  background:none;font:inherit;font-size:14px;color:var(--on-surf-var);cursor:pointer;
+}
+.seg button.sel{background:var(--pri-cont);border-color:var(--pri);color:var(--on-pri-cont)}
+.seg button:disabled{opacity:.4;cursor:default}
+.fwrap{padding:0 20px}
+.field{
+  width:100%;padding:14px;border-radius:10px;border:1px solid var(--outline);
+  font:inherit;font-size:16px;background:#fff;color:var(--on-surf);
+}
+.field:focus{outline:2px solid var(--pri);border-color:transparent}
+.fhint{padding:6px 20px 0;font-size:12px;color:var(--on-surf-var);
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.colors{display:flex;gap:12px;padding:8px 20px 0}
+.colors div{width:34px;height:34px;border-radius:50%;cursor:pointer}
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:13px;border-radius:100px;border:1px solid var(--outline);
+  background:none;font:inherit;font-size:15px;font-weight:500;color:var(--pri);cursor:pointer;
+}
+.btn:active{background:var(--pri-cont)}
+.btn.filled{background:var(--pri);color:#fff;border-color:transparent}
+.btn.danger{color:var(--err);border-color:#E7BDB8}
+.result{padding:12px 20px 0;font-size:13px;display:none;align-items:center;gap:7px;line-height:1.6}
+.result.show{display:flex}
+.result.ok{color:var(--ok)}
+.result.ng{color:var(--err)}
+.result .ms{font-size:17px}
+.toast{
+  position:absolute;left:16px;right:16px;bottom:20px;background:#31313A;color:#F2F0F7;
+  padding:14px 16px;border-radius:10px;font-size:14px;line-height:1.6;z-index:30;
+  opacity:0;transform:translateY(10px);transition:.2s;pointer-events:none;
+}
+.toast.show{opacity:1;transform:none}
+.navbar{flex:none;display:flex;background:var(--pri-cont);padding:8px 0 14px}
+.navitem{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  background:none;border:none;font:inherit;cursor:pointer;color:var(--on-surf-var);
+}
+.navitem .pill{padding:3px 20px;border-radius:100px;display:flex}
+.navitem.sel{color:var(--on-pri-cont)}
+.navitem.sel .pill{background:#C3CDF3}
+.navitem .lbl{font-size:11px;font-weight:500}
+.ms{
+  font-family:"Material Symbols Outlined";font-weight:400;font-style:normal;
+  line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;
+  white-space:nowrap;font-variation-settings:'opsz' 24;
+}
+@media (max-width:430px){
+  body{padding:0}
+  .phone{width:100%;height:100vh;border-radius:0;box-shadow:none}
+  .caption{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="caption">JPNKN Vox 設定画面<br>取得先の行をタップで編集、「追加」で新規登録</div>
+
+<div class="phone">
+  <div class="statusbar"><span>18:05</span><span class="ms" style="font-size:15px">signal_cellular_alt&nbsp;battery_5_bar</span></div>
+
+  <div class="appbar">
+    <span class="brand">JPNKN Vox</span>
+    <span class="runstate" onclick="toggleRun()"><span class="rdot on" id="rdot"></span><span id="rtext">稼働中</span></span>
+    <button class="switch on" id="master" onclick="toggleRun()" aria-label="読み上げ"><i></i></button>
+  </div>
+
+  <div class="screen">
+    <div class="banner" onclick="toast('システムのオーバーレイ権限設定を開きます')">
+      <span class="ms">warning</span>
+      <div><div>オーバーレイ権限が未許可</div><div class="s">タップして許可する</div></div>
+    </div>
+
+    <div class="sechead">コメント取得先</div>
+    <div id="srclist"></div>
+
+    <div class="sechead tl">読み上げ</div>
+    <div class="slider">
+      <div class="top"><span class="l">話す速度</span><span class="v" id="v-rate">1.2x</span></div>
+      <input type="range" min="50" max="200" step="5" value="120"
+        oninput="document.getElementById('v-rate').textContent=(this.value/100).toFixed(1)+'x'">
+    </div>
+    <div class="slider">
+      <div class="top"><span class="l">音量</span><span class="v" id="v-vol">80%</span></div>
+      <input type="range" min="0" max="100" step="1" value="80"
+        oninput="document.getElementById('v-vol').textContent=this.value+'%'">
+    </div>
+    <button class="row">
+      <div class="grow"><div class="t">最大文字数</div><div class="s">超えた分は「以下略」として省略します</div></div>
+      <span class="v">100</span>
+    </button>
+    <button class="testbtn" onclick="toast('現在の設定でテスト再生します')">
+      <span class="ms" style="font-size:19px">play_arrow</span>テスト再生</button>
+
+    <div class="sechead tl">表示</div>
+    <div class="row">
+      <div class="grow"><div class="t">オーバーレイ表示</div></div>
+      <button class="switch on" onclick="this.classList.toggle('on')" aria-label="オーバーレイ表示"><i></i></button>
+    </div>
+    <div class="slider">
+      <div class="top"><span class="l">背景の濃さ</span><span class="v" id="v-op">33%</span></div>
+      <input type="range" min="0" max="100" step="1" value="33"
+        oninput="document.getElementById('v-op').textContent=this.value+'%'">
+    </div>
+    <button class="row">
+      <div class="grow"><div class="t">文字の大きさ</div><div class="s">オーバーレイに表示するコメントの大きさ</div></div>
+      <span class="v">中</span>
+    </button>
+
+    <div class="sechead tl">動作</div>
+    <div class="row">
+      <div class="grow"><div class="t">起動時に自動で開始</div>
+        <div class="s">アプリを開いたときに読み上げを自動で開始します</div></div>
+      <button class="switch" onclick="this.classList.toggle('on')" aria-label="起動時に自動で開始"><i></i></button>
+    </div>
+    <div class="pad"></div>
+  </div>
+
+  <div class="navbar">
+    <button class="navitem" onclick="toast('ホーム画面へ')"><span class="pill"><span class="ms">home</span></span><span class="lbl">ホーム</span></button>
+    <button class="navitem" onclick="toast('ログ画面へ')"><span class="pill"><span class="ms">list</span></span><span class="lbl">ログ</span></button>
+    <button class="navitem sel"><span class="pill"><span class="ms">settings</span></span><span class="lbl">設定</span></button>
+  </div>
+
+  <div class="scrim" id="scrim" onclick="closeSheet()"></div>
+
+  <div class="sheet" id="sheet">
+    <div class="grab"></div>
+    <h3 id="sh-title">コメント取得先を追加</h3>
+    <p class="lead" id="sh-lead"></p>
+
+    <div class="flabel">サービス</div>
+    <div class="seg" id="seg"></div>
+
+    <div class="flabel" id="lab-id">板 ID</div>
+    <div class="fwrap"><input class="field" id="in-id" oninput="onIdInput()"></div>
+    <div class="fhint" id="hint-id"></div>
+
+    <div class="flabel">表示名</div>
+    <div class="fwrap"><input class="field" id="in-name" placeholder="空欄なら ID を使います"></div>
+
+    <div class="flabel">識別色</div>
+    <div class="colors" id="colors"></div>
+
+    <div style="padding:22px 20px 0">
+      <button class="btn" onclick="testConn()"><span class="ms" style="font-size:19px">cable</span>接続をテスト</button>
+    </div>
+    <div class="result" id="result"></div>
+
+    <div style="padding:14px 20px 0"><button class="btn filled" id="btn-save" onclick="save()">追加する</button></div>
+    <div style="padding:10px 20px 0;display:none" id="del-wrap">
+      <button class="btn danger" onclick="del()"><span class="ms" style="font-size:19px">delete</span>削除する</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<div class="caption">右上のスイッチで稼働／停止が切り替わります</div>
+
+<script>
+const TYPES={
+  jpnkn :{label:"jpnkn",short:"jpnkn",   field:"板 ID",       ph:"inohead",     hint:v=>"bbs/"+v},
+  twitch:{label:"Twitch",short:"Twitch", field:"チャンネル名",ph:"channel_name",hint:v=>"#"+v},
+  cas   :{label:"ツイキャス",short:"ツイキャス",field:"ユーザー ID",ph:"casting_id",hint:v=>"c:"+v}
+};
+const ORDER=["jpnkn","twitch","cas"];
+const PALETTE=["#0B57D0","#1E7B45","#8B3FE8","#C7411F","#B0398A"];
+let running=true, editing=null, fType="jpnkn", fColor=PALETTE[0];
+let sources=[
+  {type:"jpnkn", id:"niijima", name:"にいじま板", color:"#0B57D0", state:"ok"},
+  {type:"cas",   id:"pcast_live", name:"pcast_live", color:"#C7411F", state:"wait"}
+];
+
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg;t.classList.add("show");
+  clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2400);
+}
+function toggleRun(){
+  running=!running;
+  document.getElementById("rdot").classList.toggle("on",running);
+  document.getElementById("rtext").textContent=running?"稼働中":"停止中";
+  document.getElementById("master").classList.toggle("on",running);
+  render();
+}
+function stateHtml(s){
+  if(!running) return '<span class="state">待機</span>';
+  if(s.state==="wait") return '<span class="state wait"><span class="ms">schedule</span>配信待ち</span>';
+  return '<span class="state ok"><span class="ms">check_circle</span>接続中</span>';
+}
+function render(){
+  const el=document.getElementById("srclist");
+  let html=sources.map((s,i)=>`
+    <button class="row" onclick="openEdit(${i})">
+      <span class="accent" style="background:${s.color}"></span>
+      <span class="grow"><span class="t">${s.name}</span>
+        <div class="s mono">${TYPES[s.type].label} · ${TYPES[s.type].hint(s.id)}</div></span>
+      ${stateHtml(s)}
+    </button>`).join("");
+  if(!sources.length){
+    html=`<div class="row" style="cursor:default"><div class="grow">
+      <div class="s" style="margin:0">まだ登録されていません</div></div></div>`;
+  }
+  html+=`<button class="addrow" onclick="openAdd()"><span class="ms">add</span>コメント取得先を追加</button>`;
+  el.innerHTML=html;
+}
+function openSheet(){document.getElementById("scrim").classList.add("show");document.getElementById("sheet").classList.add("show")}
+function closeSheet(){document.getElementById("scrim").classList.remove("show");document.getElementById("sheet").classList.remove("show")}
+function renderSeg(locked){
+  document.getElementById("seg").innerHTML=ORDER.map(t=>
+    `<button class="${t===fType?"sel":""}" ${locked?"disabled":""} onclick="pickType('${t}')">${TYPES[t].short}</button>`).join("");
+}
+function renderColors(){
+  document.getElementById("colors").innerHTML=PALETTE.map(c=>
+    `<div onclick="pickColor('${c}')" style="background:${c};box-shadow:${c===fColor?`0 0 0 3px var(--surf),0 0 0 5px ${c}`:"none"}"></div>`).join("");
+}
+function pickType(t){
+  fType=t;renderSeg(false);
+  document.getElementById("lab-id").textContent=TYPES[t].field;
+  const inp=document.getElementById("in-id");
+  inp.placeholder=TYPES[t].ph;inp.value="";
+  onIdInput();
+}
+function pickColor(c){fColor=c;renderColors()}
+function onIdInput(){
+  const T=TYPES[fType],v=document.getElementById("in-id").value.trim();
+  document.getElementById("hint-id").textContent=T.hint(v||T.ph);
+  document.getElementById("result").className="result";
+}
+function testConn(){
+  const v=document.getElementById("in-id").value.trim();
+  const r=document.getElementById("result");
+  if(!v){r.className="result show ng";r.innerHTML='<span class="ms">error</span>IDを入力してください';return}
+  if(sources.some((s,i)=>s.type===fType&&s.id===v&&i!==editing)){
+    r.className="result show ng";
+    r.innerHTML='<span class="ms">error</span>この取得先はすでに登録されています';return;
+  }
+  r.className="result show";r.style.color="var(--on-surf-var)";
+  r.innerHTML='<span class="ms">sync</span>接続を確認しています…';
+  setTimeout(()=>{
+    r.className="result show ok";r.style.color="";
+    r.innerHTML='<span class="ms">check_circle</span>接続できました · 直近のレス「カメラ下げてー」';
+  },900);
+}
+function openAdd(){
+  editing=null;fType="jpnkn";fColor=PALETTE[sources.length%PALETTE.length];
+  document.getElementById("sh-title").textContent="コメント取得先を追加";
+  document.getElementById("sh-lead").textContent="読み上げたい掲示板や配信を登録します。稼働中でもそのまま追加できます。";
+  document.getElementById("btn-save").textContent="追加する";
+  document.getElementById("del-wrap").style.display="none";
+  document.getElementById("in-name").value="";
+  document.getElementById("result").className="result";
+  renderSeg(false);renderColors();pickType("jpnkn");
+  openSheet();
+}
+function openEdit(i){
+  editing=i;const s=sources[i];
+  fType=s.type;fColor=s.color;
+  document.getElementById("sh-title").textContent=s.name;
+  document.getElementById("sh-lead").textContent="サービスの種類は変更できません。変える場合は削除して追加し直してください。";
+  document.getElementById("btn-save").textContent="保存する";
+  document.getElementById("del-wrap").style.display="block";
+  document.getElementById("result").className="result";
+  renderSeg(true);renderColors();
+  document.getElementById("lab-id").textContent=TYPES[s.type].field;
+  document.getElementById("in-id").value=s.id;
+  document.getElementById("in-name").value=s.name;
+  onIdInput();openSheet();
+}
+function save(){
+  const id=document.getElementById("in-id").value.trim();
+  if(!id){toast("IDを入力してください");return}
+  const name=document.getElementById("in-name").value.trim()||id;
+  if(editing===null){
+    sources.push({type:fType,id,name,color:fColor,state:fType==="cas"?"wait":"ok"});
+    render();closeSheet();
+    toast(running?`${name} を追加して接続しました`:`${name} を追加しました`);
+  }else{
+    Object.assign(sources[editing],{id,name,color:fColor});
+    render();closeSheet();toast("保存しました");
+  }
+}
+function del(){
+  const s=sources[editing];
+  sources.splice(editing,1);
+  render();closeSheet();
+  toast(running?`${s.name} を切断して削除しました`:`${s.name} を削除しました`);
+}
+render();
+</script>
+</body>
+</html>

@@ -24,6 +24,7 @@ class SettingsRepository(private val context: Context) {
 
     companion object {
         private val BOARD_ID_KEY = stringPreferencesKey("board_id")
+        private val COMMENT_SOURCES_KEY = stringPreferencesKey("comment_sources")
         private val OVERLAY_ENABLED_KEY = booleanPreferencesKey("overlay_enabled")
         private val MAX_MESSAGE_LENGTH_KEY = intPreferencesKey("max_message_length")
         private val OVERLAY_ALPHA_KEY = intPreferencesKey("overlay_alpha")
@@ -34,11 +35,19 @@ class SettingsRepository(private val context: Context) {
     }
 
     /**
-     * 板 ID を取得（Flow）
+     * コメント取得先の一覧を取得（Flow）
+     *
+     * 未保存の場合は、板 ID しか持っていなかった頃の設定から移行する。
+     * 移行結果はここでは保存せず、次に取得先が編集された時点で書き込まれる。
      */
-    val boardIdFlow: Flow<String> = context.dataStore.data
+    val commentSourcesFlow: Flow<List<CommentSource>> = context.dataStore.data
         .map { preferences ->
-            preferences[BOARD_ID_KEY] ?: ""
+            val json = preferences[COMMENT_SOURCES_KEY]
+            if (json != null) {
+                CommentSource.listFromJson(json)
+            } else {
+                CommentSource.migrateFromBoardId(preferences[BOARD_ID_KEY])
+            }
         }
 
     /**
@@ -98,13 +107,16 @@ class SettingsRepository(private val context: Context) {
         }
 
     /**
-     * 板 ID を保存
+     * コメント取得先の一覧を保存
      *
-     * @param boardId 板 ID
+     * 移行元の `board_id` は消さずに残す。取得先を消しただけで
+     * 移行前の設定まで失われるのを避けるため。
+     *
+     * @param sources 取得先の一覧
      */
-    suspend fun saveBoardId(boardId: String) {
+    suspend fun saveCommentSources(sources: List<CommentSource>) {
         context.dataStore.edit { preferences ->
-            preferences[BOARD_ID_KEY] = boardId
+            preferences[COMMENT_SOURCES_KEY] = CommentSource.listToJson(sources)
         }
     }
 

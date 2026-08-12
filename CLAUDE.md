@@ -2,8 +2,8 @@
 
 ## プロジェクト概要
 
-JPNKN掲示板（bbs.jpnkn.com）のリアルタイムコメントをMQTTで受信し、TTSで読み上げるAndroidアプリ。
-IRL配信（屋外配信）での手放し運用を想定。
+JPNKN掲示板（bbs.jpnkn.com）とツイキャスのリアルタイムコメントを受信し、TTSで読み上げるAndroidアプリ。
+取得先は複数登録でき、同時に読み上げる。IRL配信（屋外配信）での手放し運用を想定。
 
 **パッケージ名:** `com.github.titagaki.jpnknvox`
 **バージョン:** 0.1.3
@@ -45,10 +45,11 @@ IRL配信（屋外配信）での手放し運用を想定。
 > Windows では `.\gradlew.bat` を使用。JAVA_HOME 未設定の場合:
 > `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`
 
-## MQTT仕様
+## コメント取得先の仕様
 
-接続情報・ペイロード形式は `docs/spec/jpnkn-api-spec.md`、
-再接続やクライアント実装は `docs/spec/DESIGN-jpnkn-vox.md` §2.4 を参照。
+- jpnkn（MQTT）: 接続情報・ペイロード形式は `docs/spec/jpnkn-api-spec.md`
+- ツイキャス: `docs/spec/twicas-comment-spec.md`（**公式 API v2 は使わない**。理由も同ファイル）
+- 再接続やクライアント実装は `docs/spec/DESIGN-jpnkn-vox.md` §2.4 を参照
 
 ## 必要なパーミッション
 
@@ -65,7 +66,10 @@ IRL配信（屋外配信）での手放し運用を想定。
 ## アーキテクチャ上の注意点
 
 - `MessageManager` はSingletonで `StateFlow` を公開。サービスとUIの両方から参照する
-- `JpnknVoxService` が `MqttManager` / `TtsManager` / `OverlayManager` を統括する
+- `JpnknVoxService` が `CommentConnector`（取得先ごとに1つ）/ `TtsManager` / `OverlayManager` を統括する
+- 取得先の追加・編集・削除・起動はすべて `EXTRA_SOURCES` の1経路。サービス側が差分だけ接続・切断する
+- 新しい取得先の種別を足すときは `SourceType` に追加し、`CommentConnector` を実装する
+- TTSのキューは全取得先で1本。どこから来たコメントも同じキューに入る
 - メッセージログ・システムログともに最大500件で古いものから削除
 - オーバーレイ表示は最大60文字に切り詰め（表示は2行固定で、あふれた分は末尾を省略）
 
@@ -92,5 +96,7 @@ IRL配信（屋外配信）での手放し運用を想定。
 - `docs/spec/DESIGN-jpnkn-vox.md` — 設計書（ディレクトリ構成・クラス図・状態遷移図）
 - `docs/spec/jpnkn-api-spec.md` — MQTT APIスペック
 - `docs/spec/schema-jpnkn.json` — MQTT ペイロードの JSON スキーマ
-- `docs/references/jpnkn-vox-settings.html` — 設定画面のモックアップ
+- `docs/spec/twicas-comment-spec.md` — ツイキャスのコメント取得仕様
+- `docs/references/jpnkn-vox-settings-inline.html` — 設定画面のモックアップ（取得先リスト版）
+- `docs/references/jpnkn-vox-settings.html` — 設定画面のモックアップ（板 ID 1 件だった頃）
 - `README.md` — ユーザー向けインストール・ビルド手順（日本語）

@@ -12,11 +12,17 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.github.titagaki.jpnknvox.config.AppConfig
-import com.github.titagaki.jpnknvox.data.JpnknMessage
+import com.github.titagaki.jpnknvox.data.CommentSource
 import com.github.titagaki.jpnknvox.data.MessageManager
+import com.github.titagaki.jpnknvox.data.ReceivedComment
 import com.github.titagaki.jpnknvox.data.SettingsRepository
-import com.github.titagaki.jpnknvox.mqtt.MqttManager
+import com.github.titagaki.jpnknvox.data.SourceType
 import com.github.titagaki.jpnknvox.overlay.OverlayManager
+import com.github.titagaki.jpnknvox.source.CommentConnector
+import com.github.titagaki.jpnknvox.source.CommentConnectorCallbacks
+import com.github.titagaki.jpnknvox.source.JpnknConnector
+import com.github.titagaki.jpnknvox.source.SourceStatus
+import com.github.titagaki.jpnknvox.source.TwicasConnector
 import com.github.titagaki.jpnknvox.tts.TtsManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +30,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * JPNKN Vox のバックグラウンドサービス
@@ -32,15 +39,15 @@ import kotlinx.coroutines.runBlocking
  * このサービスは統合と調整のみを担当する
  *
  * - Foreground Service として常駐し、OS によるタスクキルを防止
- * - MqttManager: MQTT 接続管理
- * - TtsManager: 音声合成管理
+ * - CommentConnector: 取得先ごとの接続管理（jpnkn / ツイキャス）
+ * - TtsManager: 音声合成管理。全取得先で 1 つのキューを共有する
  * - OverlayManager: オーバーレイUI管理
  */
 class JpnknVoxService : Service() {
 
     companion object {
         private const val TAG = "JpnknVoxService"
-        const val EXTRA_BOARD_ID = "extra_board_id"
+        const val EXTRA_SOURCES = "extra_sources"
         const val EXTRA_MAX_MESSAGE_LENGTH = "extra_max_message_length"
         const val EXTRA_OVERLAY_ALPHA = "extra_overlay_alpha"
         const val EXTRA_OVERLAY_TEXT_SIZE = "extra_overlay_text_size"
@@ -57,11 +64,20 @@ class JpnknVoxService : Service() {
 
     // マネージャー
     private var ttsManager: TtsManager? = null
-    private var mqttManager: MqttManager? = null
     private var overlayManager: OverlayManager? = null
 
-    // 板 ID（Intent から設定される）
-    private var boardId: String = ""
+    /** 稼働中の接続。キーは [CommentSource.uuid]。メインスレッドからのみ触る */
+    private val connectors = LinkedHashMap<String, CommentConnector>()
+
+    /**
+     * 取得先ごとの接続状態。オーバーレイに出す状態をまとめるのに使う
+     *
+     * 各取得先の通信スレッドから書き込まれるため ConcurrentHashMap で持つ。
+     */
+    private val statuses = ConcurrentHashMap<String, SourceStatus>()
+
+    /** 設定された取得先。読み上げ時に ID と識別色を引くのに使う（通信スレッドから読む） */
+    private val sources = ConcurrentHashMap<String, CommentSource>()
 
     // メッセージ最大文字数
     private var maxMessageLength: Int = AppConfig.Tts.DEFAULT_MAX_MESSAGE_LENGTH
@@ -77,6 +93,25 @@ class JpnknVoxService : Service() {
 
     // 読み上げ音量（0〜100 %）
     private var speechVolume: Int = AppConfig.Tts.DEFAULT_VOLUME
+
+    /** TTS の初期化が済むまで接続を待たせるための、保留中の取得先 */
+    private var pendingSources: List<CommentSource>? = null
+
+    private val connectorCallbacks = object : CommentConnectorCallbacks {
+        override fun onStatusChanged(source: CommentSource, status: SourceStatus) {
+            statuses[source.uuid] = status
+            MessageManager.updateSourceStatus(source.uuid, status)
+            overlayManager?.showStatus(OverlayManager.aggregateStatus(statuses.values))
+        }
+
+        override fun onComment(comment: ReceivedComment) {
+            onCommentReceived(comment)
+        }
+
+        override fun onSystemLog(message: String) {
+            MessageManager.addSystemLog(message)
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -114,31 +149,12 @@ class JpnknVoxService : Service() {
                 MessageManager.addSystemLog("TTS エラー: $message")
             }
         )
-
-        // MQTT マネージャーを初期化
-        mqttManager = MqttManager(
-            coroutineScope = serviceScope,
-            onConnected = { onMqttConnected() },
-            onDisconnected = { cause -> onMqttDisconnected(cause) },
-            onMessageReceived = { message -> onMessageReceived(message) },
-            onError = { message ->
-                MessageManager.addSystemLog("MQTT エラー: $message")
-            }
-        ).also {
-            it.initialize()
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service onStartCommand")
 
-        // 板 ID を Intent から取得（起動時のみ有効）
-        intent?.getStringExtra(EXTRA_BOARD_ID)?.let {
-            boardId = it
-            Log.d(TAG, "Board ID set to: $boardId")
-        }
-
-        // 最大文字数を Intent から取得（起動時のみ有効）
+        // 最大文字数を Intent から取得
         intent?.takeIf { it.hasExtra(EXTRA_MAX_MESSAGE_LENGTH) }?.let {
             maxMessageLength =
                 it.getIntExtra(EXTRA_MAX_MESSAGE_LENGTH, AppConfig.Tts.DEFAULT_MAX_MESSAGE_LENGTH)
@@ -180,10 +196,15 @@ class JpnknVoxService : Service() {
             Log.d(TAG, "Overlay enabled set to: ${it.getBooleanExtra(EXTRA_OVERLAY_ENABLED, true)}")
         }
 
+        // 取得先。開始・追加・編集・削除のいずれもここを通り、差分だけ反映する
+        intent?.getStringExtra(EXTRA_SOURCES)?.let { json ->
+            applySources(CommentSource.listFromJson(json))
+        }
+
         startForegroundServiceWithNotification()
 
         // START_NOT_STICKY: プロセスが落ちても OS に勝手に作り直させない。
-        // 再生成時は Intent が null になり板 ID を失うため、開始・停止は明示的な操作に限る。
+        // 再生成時は Intent が null になり取得先を失うため、開始・停止は明示的な操作に限る。
         return START_NOT_STICKY
     }
 
@@ -208,9 +229,12 @@ class JpnknVoxService : Service() {
         overlayManager?.remove()
         overlayManager = null
 
-        // MQTT を切断
-        mqttManager?.shutdown()
-        mqttManager = null
+        // 取得先をすべて切断
+        connectors.values.forEach { it.stop() }
+        connectors.clear()
+        statuses.clear()
+        sources.clear()
+        MessageManager.clearSourceStatuses()
 
         // TTS を解放
         ttsManager?.shutdown()
@@ -218,6 +242,63 @@ class JpnknVoxService : Service() {
 
         serviceScope.cancel()
         super.onDestroy()
+    }
+
+    // ========================================
+    // 取得先の管理
+    // ========================================
+
+    /**
+     * 設定された取得先に合わせて、稼働中の接続を差分で入れ替える
+     *
+     * 消えたものは切断し、増えたものは接続する。
+     * 接続先（種別・ID）が変わったものは張り直す。識別色だけの変更では
+     * 接続をそのままにする（[CommentSource.connectsTo]）。
+     *
+     * TTS の初期化前に呼ばれた場合は、初期化が済んでから接続する。
+     */
+    private fun applySources(newSources: List<CommentSource>) {
+        sources.clear()
+        newSources.forEach { sources[it.uuid] = it }
+
+        if (ttsManager?.isReady != true) {
+            // 開始直後はここを通る。TTS の準備ができてから繋ぐ
+            pendingSources = newSources
+            Log.d(TAG, "TTS is not ready yet, ${newSources.size} source(s) pending")
+            return
+        }
+        pendingSources = null
+
+        val newByUuid = newSources.associateBy { it.uuid }
+
+        // 消えた取得先・接続先が変わった取得先を止める
+        connectors.entries.toList().forEach { (uuid, connector) ->
+            val updated = newByUuid[uuid]
+            if (updated == null || !updated.connectsTo(connector.source)) {
+                connector.stop()
+                connectors.remove(uuid)
+                statuses.remove(uuid)
+                MessageManager.removeSourceStatus(uuid)
+            }
+        }
+
+        // 増えた取得先を繋ぐ
+        newSources.forEach { source ->
+            if (!connectors.containsKey(source.uuid)) {
+                createConnector(source).also {
+                    connectors[source.uuid] = it
+                    it.start()
+                }
+            }
+        }
+
+        overlayManager?.showStatus(OverlayManager.aggregateStatus(statuses.values))
+        Log.d(TAG, "Applied ${newSources.size} source(s), ${connectors.size} connector(s) running")
+    }
+
+    private fun createConnector(source: CommentSource): CommentConnector = when (source.type) {
+        SourceType.JPNKN -> JpnknConnector(source, serviceScope, connectorCallbacks)
+        SourceType.TWICAS -> TwicasConnector(source, serviceScope, connectorCallbacks)
     }
 
     // ========================================
@@ -231,26 +312,12 @@ class JpnknVoxService : Service() {
                     it.create(overlayAlpha, overlayTextSize)
                 }
                 // 再作成後に現在の接続状態を反映
-                val status = if (mqttManager?.connectionState == true) {
-                    OverlayManager.ConnectionStatus.CONNECTED
-                } else {
-                    OverlayManager.ConnectionStatus.DISCONNECTED
-                }
-                overlayManager?.showStatus(status)
+                overlayManager?.showStatus(OverlayManager.aggregateStatus(statuses.values))
             }
         } else {
             overlayManager?.remove()
             overlayManager = null
         }
-    }
-
-    private fun applyMaxMessageLength(length: Int) {
-        maxMessageLength = length
-    }
-
-    private fun applyOverlayAlpha(alpha: Int) {
-        overlayAlpha = alpha
-        overlayManager?.updateAlpha(alpha)
     }
 
     // ========================================
@@ -261,29 +328,18 @@ class JpnknVoxService : Service() {
         MessageManager.addSystemLog("音声エンジンを初期化しました")
         ttsManager?.enqueue("じゃぱんくん-Vox 開始しました")
 
-        // TTS 初期化後に MQTT 接続を開始（板 ID を使用）
-        val topic = AppConfig.Mqtt.createTopic(boardId)
-        MessageManager.addSystemLog("板 ID: $boardId (トピック: $topic)")
-        mqttManager?.connect(topic)
+        // TTS 初期化前に受け取っていた取得先があれば、ここで接続する
+        pendingSources?.let { applySources(it) }
     }
 
     // ========================================
-    // MQTT コールバック
+    // コメント受信
     // ========================================
 
-    private fun onMqttConnected() {
-        MessageManager.addSystemLog("MQTT 接続成功")
-        overlayManager?.showStatus(OverlayManager.ConnectionStatus.CONNECTED)
-    }
-
-    private fun onMqttDisconnected(cause: Throwable?) {
-        val message = cause?.message ?: "不明な理由"
-        MessageManager.addSystemLog("MQTT 切断: $message")
-        overlayManager?.showStatus(OverlayManager.ConnectionStatus.DISCONNECTED)
-    }
-
-    private fun onMessageReceived(message: JpnknMessage) {
-        val text = message.extractMessage()
+    private fun onCommentReceived(comment: ReceivedComment) {
+        val source = sources[comment.sourceUuid] ?: return
+        val text = comment.message
+        if (text.isBlank()) return
 
         // 最大文字数で省略
         val ttsText = if (text.length > maxMessageLength) {
@@ -292,13 +348,16 @@ class JpnknVoxService : Service() {
             text
         }
 
-        MessageManager.addMessage(message)
+        MessageManager.addMessage(comment, source)
+
+        // 取得先が 1 つだけなら、どこから来たかは自明なので出さない
+        val overlaySourceId = if (sources.size > 1) source.sourceId else null
 
         // オーバーレイは受信時ではなく読み上げ開始時に更新する。
         // 読み上げが詰まっているとき、表示だけ先に進んで
         // 聞こえている内容と食い違うのを防ぐ
         ttsManager?.enqueue(ttsText) {
-            overlayManager?.updateMessage(text)
+            overlayManager?.updateMessage(text, overlaySourceId)
         }
     }
 

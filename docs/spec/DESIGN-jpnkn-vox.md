@@ -1,6 +1,6 @@
 # 詳細設計書：JPNKN Vox for Android
 
-**バージョン**: 1.4
+**バージョン**: 1.5
 **作成日**: 2026-02-28
 **最終更新**: 2026-08-12
 **対応 SRS**: `docs/spec/SRS-jpnkn-vox.md`
@@ -17,13 +17,23 @@ app/src/main/java/com/github/titagaki/jpnknvox/
 ├── MainViewModel.kt         # UI状態管理
 ├── JpnknVoxService.kt       # フォアグラウンドサービス（メイン処理）
 ├── ServiceController.kt     # サービスライフサイクル制御
-├── config/AppConfig.kt      # 定数・設定値（MQTTサーバー情報等）
+├── config/AppConfig.kt      # 定数・設定値（MQTT/ツイキャス接続情報等）
 ├── data/
+│   ├── CommentSource.kt     # コメント取得先（種別・ID・識別色）
+│   ├── ReceivedComment.kt   # 取得先によらないコメントの共通形
 │   ├── JpnknMessage.kt      # MQTTペイロードのデータモデル
 │   ├── MessageLog.kt        # 表示用ログエントリ
-│   ├── MessageManager.kt    # Singleton StateFlow（メッセージ状態）
+│   ├── MessageManager.kt    # Singleton StateFlow（メッセージ・接続状態）
 │   └── SettingsRepository.kt # DataStore永続化
+├── source/
+│   ├── CommentConnector.kt  # 取得先の接続の抽象（SourceStatus を含む）
+│   ├── JpnknConnector.kt    # jpnkn（MqttManager を包む）
+│   ├── TwicasConnector.kt   # ツイキャス（配信待ち→WebSocket の状態遷移）
+│   └── SourceTester.kt      # 登録前の接続テスト
 ├── mqtt/MqttManager.kt      # MQTT接続・再接続管理
+├── twicas/
+│   ├── TwicasClient.kt      # ツイキャスのHTTP/WebSocket通信
+│   └── TwicasEvent.kt       # ツイキャスの応答のパース（純粋関数）
 ├── tts/TtsManager.kt        # TTS管理・キュー制御
 ├── overlay/OverlayManager.kt # WindowManagerオーバーレイ
 └── ui/
@@ -43,26 +53,35 @@ app/src/main/java/com/github/titagaki/jpnknvox/
                │ collectAsState
 ┌──────────────▼──────────────────────────────────────┐
 │  状態ブリッジ（data/MessageManager）                  │
-│  messageLogs: StateFlow  /  systemLogs: StateFlow   │
+│  messageLogs / systemLogs / sourceStatuses          │
 └──────────────┬──────────────────────────────────────┘
-               │ addMessage / addSystemLog
+               │ addMessage / addSystemLog / updateSourceStatus
 ┌──────────────▼──────────────────────────────────────┐
 │  サービスレイヤー（JpnknVoxService）                   │
-│  MqttManager  /  TtsManager  /  OverlayManager      │
+│  CommentConnector × N  /  TtsManager                │
+│  OverlayManager                                     │
+│    ├ JpnknConnector  → MqttManager                  │
+│    └ TwicasConnector → TwicasClient                 │
 └─────────────────────────────────────────────────────┘
 ```
+
+取得先は複数を同時に扱う。TTS のキューは 1 本で、
+どの取得先から来たコメントも同じキューに入る。
 
 ### 1.3 データフロー
 
 ```
-[MQTT ブローカー]
-      │ TCP:1883
-      ▼
-MqttManager.handleMessage()
-      │ JSON ペイロード
-      ▼
-JpnknMessage.fromJson()          ← パース失敗時は onError にフォールバック
-      │
+[MQTT ブローカー]              [ツイキャス コメントサーバ]
+      │ TCP:1883                    │ WebSocket
+      ▼                             ▼
+MqttManager.handleMessage()   TwicasClient (TwicasEvent でパース)
+      │                             │
+      ▼                             ▼
+JpnknConnector                TwicasConnector
+      └──────────┬──────────────────┘
+                 ▼
+          ReceivedComment          ← 取得先によらない共通形
+                 │
       ├─► MessageManager.addMessage()  → messageLogs StateFlow → HomeScreen
       ├─► MessageManager.addSystemLog() → systemLogs StateFlow → LogScreen
       ├─► OverlayManager.updateMessage() → システムオーバーレイ
@@ -74,11 +93,12 @@ JpnknMessage.fromJson()          ← パース失敗時は onError にフォー�
 ```
 UI スイッチ ON
   └─ MainViewModel.startService()
-       └─ ServiceController.start(boardId, maxMessageLength, overlayAlpha)
-            └─ startForegroundService(Intent)
+       └─ ServiceController.start(sources, maxMessageLength, overlayAlpha)
+            └─ startForegroundService(Intent)   ← 取得先は JSON 配列で渡す
                  └─ JpnknVoxService.onCreate()
                       ├─ TtsManager 初期化
-                      └─ MqttManager 初期化 → onTtsInitialized() 後に connect()
+                      └─ onStartCommand → applySources()
+                           （TTS 未初期化なら保留し、onTtsInitialized() 後に接続）
 
 UI スイッチ OFF
   └─ MainViewModel.stopService()
@@ -86,8 +106,17 @@ UI スイッチ OFF
             └─ stopService(Intent)
                  └─ JpnknVoxService.onDestroy()
                       ├─ OverlayManager.remove()
-                      ├─ MqttManager.shutdown()
+                      ├─ 全 CommentConnector.stop()
                       └─ TtsManager.shutdown()
+
+取得先の追加・編集・削除（稼働中でも可）
+  └─ MainViewModel.addSource / updateSource / removeSource
+       └─ ServiceController.setSources(sources)
+            └─ JpnknVoxService.applySources()
+                 ├─ 消えた取得先・接続先が変わった取得先 → stop()
+                 └─ 増えた取得先 → createConnector().start()
+       ※ 識別色だけの変更では接続を張り直さない
+         （CommentSource.connectsTo で判定）
 
 設定画面からの即時反映
   ├─ MainViewModel.updateOverlayEnabled(enabled)
@@ -130,7 +159,7 @@ UI スイッチ OFF
   | プロパティ | 型 | 説明 |
   |---|---|---|
   | `isServiceRunning` | `MutableState<Boolean>` | サービス稼働状態 |
-  | `boardId` | `MutableState<String>` | 現在の板 ID |
+  | `sources` | `StateFlow<List<CommentSource>>` | コメント取得先の一覧 |
   | `isOverlayEnabled` | `MutableState<Boolean>` | オーバーレイ表示の有効状態 |
   | `maxMessageLength` | `MutableState<Int>` | 読み上げ最大文字数 |
   | `overlayAlpha` | `MutableState<Int>` | オーバーレイ背景の濃さ（0〜100 %） |
@@ -139,15 +168,18 @@ UI スイッチ OFF
   | `autoStartOnLaunch` | `MutableState<Boolean>` | アプリ起動時の自動開始 |
 
 - **初期化**: `init` ブロックで `SettingsRepository` の各 Flow を `first()` で取得し状態に反映したのち、`autoStartIfNeeded()` を呼ぶ
-- **自動開始（`autoStartIfNeeded()`）**: `autoStartOnLaunch` が `true` で、サービスが未稼働かつ板 ID が空でない場合のみ `startService()` を呼ぶ。板 ID 未設定時は `MessageManager` にその旨を記録してスキップする
+- **自動開始（`autoStartIfNeeded()`）**: `autoStartOnLaunch` が `true` で、サービスが未稼働かつ取得先が 1 件以上ある場合のみ `startService()` を呼ぶ。取得先が無い場合は `MessageManager` にその旨を記録してスキップする
 - **委譲先**: `ServiceController`（起動・停止・即時反映）、`SettingsRepository`（各設定の永続化）
 - **メソッド**:
 
   | メソッド | 説明 |
   |---|---|
-  | `startService()` | `ServiceController.start(boardId, maxMessageLength, overlayAlpha)` を呼び出す |
+  | `startService()` | `ServiceController.start(sources, maxMessageLength, overlayAlpha)` を呼び出す |
   | `stopService()` | `ServiceController.stop()` を呼び出す |
-  | `updateBoardId(newBoardId)` | 状態更新 + `SettingsRepository.saveBoardId` |
+  | `addSource(type, sourceId, name, color)` | 取得先を追加して保存 + `ServiceController.setSources` |
+  | `updateSource(uuid, sourceId, name, color)` | 取得先を更新して保存 + `ServiceController.setSources`（種別は変更不可） |
+  | `removeSource(uuid)` | 取得先を削除して保存 + `ServiceController.setSources` |
+  | `testSource(type, sourceId, onResult)` | `SourceTester` で接続テストし、結果をコールバックで返す |
   | `updateOverlayEnabled(enabled)` | 状態更新 + `SettingsRepository.saveOverlayEnabled` + `ServiceController.setOverlayEnabled` |
   | `updateMaxMessageLength(length)` | 状態更新 + `SettingsRepository.saveMaxMessageLength` + `ServiceController.setMaxMessageLength` |
   | `updateOverlayAlpha(alpha)` | 状態更新 + `SettingsRepository.saveOverlayAlpha` + `ServiceController.setOverlayAlpha` |
@@ -162,8 +194,9 @@ UI スイッチ OFF
 
   | メソッド | 説明 |
   |---|---|
-  | `start(boardId, maxMessageLength, overlayAlpha)` | `startForegroundService` でサービス起動（`EXTRA_BOARD_ID`・`EXTRA_MAX_MESSAGE_LENGTH`・`EXTRA_OVERLAY_ALPHA` を Intent に付与）、`MessageManager.addSystemLog` に記録 |
+  | `start(sources, maxMessageLength, overlayAlpha)` | `startForegroundService` でサービス起動（`EXTRA_SOURCES`・`EXTRA_MAX_MESSAGE_LENGTH`・`EXTRA_OVERLAY_ALPHA` を Intent に付与）、`MessageManager.addSystemLog` に記録 |
   | `stop()` | `stopService` でサービス停止、`MessageManager.addSystemLog` に記録 |
+  | `setSources(sources: List<CommentSource>)` | `EXTRA_SOURCES`（JSON 配列）を付けて `startService`。サービス側が差分だけ接続・切断する |
   | `setOverlayEnabled(enabled: Boolean)` | `JpnknVoxService.instance?.applyOverlayEnabled(enabled)` を呼び出す |
   | `setMaxMessageLength(length: Int)` | `JpnknVoxService.instance?.applyMaxMessageLength(length)` を呼び出す |
   | `setOverlayAlpha(alpha: Int)` | `JpnknVoxService.instance?.applyOverlayAlpha(alpha)` を呼び出す |
@@ -177,7 +210,7 @@ UI スイッチ OFF
 #### `JpnknVoxService`
 - **継承**: `Service`
 - **種別**: Foreground Service（`START_NOT_STICKY`）
-  - `START_NOT_STICKY` を返すのは、プロセスが落ちたときに OS がサービスを作り直すと Intent が `null` になり板 ID を失う（空トピック `bbs/` に接続してしまう）ため。開始・停止は明示的な操作に限る
+  - `START_NOT_STICKY` を返すのは、プロセスが落ちたときに OS がサービスを作り直すと Intent が `null` になり取得先を失う（1 件も繋がないまま常駐してしまう）ため。開始・停止は明示的な操作に限る
   - `onTaskRemoved()`: タスク一覧からアプリがスワイプで終了されたら `stopSelf()` でサービスも停止する
 - **通知**: `NotificationChannel(IMPORTANCE_LOW)` + `startForeground`
   - Android 14+: `FOREGROUND_SERVICE_TYPE_SPECIAL_USE`
@@ -186,7 +219,7 @@ UI スイッチ OFF
 
   | 定数/プロパティ | 説明 |
   |---|---|
-  | `EXTRA_BOARD_ID` | Intent に渡す板 ID のキー |
+  | `EXTRA_SOURCES` | Intent に渡すコメント取得先（JSON 配列）のキー |
   | `EXTRA_MAX_MESSAGE_LENGTH` | Intent に渡す最大文字数のキー |
   | `EXTRA_OVERLAY_ALPHA` | Intent に渡すオーバーレイ濃さのキー |
   | `EXTRA_OVERLAY_ENABLED` | Intent に渡すオーバーレイ表示 ON/OFF のキー |
@@ -198,7 +231,9 @@ UI スイッチ OFF
 
   | フィールド | 型 | デフォルト |
   |---|---|---|
-  | `boardId` | `String` | `""` （空文字、`onStartCommand` で Intent から設定される） |
+  | `connectors` | `LinkedHashMap<String, CommentConnector>` | 空（uuid → 稼働中の接続。メインスレッドからのみ触る） |
+  | `sources` | `ConcurrentHashMap<String, CommentSource>` | 空（uuid → 取得先。通信スレッドから読む） |
+  | `statuses` | `ConcurrentHashMap<String, SourceStatus>` | 空（uuid → 接続状態。通信スレッドから書く） |
   | `maxMessageLength` | `Int` | `100` |
   | `overlayAlpha` | `Int` | `80` （0〜100 %） |
   | `speechRate` | `Int` | `120` （100 で等倍の百分率） |
@@ -212,11 +247,10 @@ UI スイッチ OFF
     ├─ NotificationChannel 作成
     ├─ SettingsRepository から overlayAlpha / speechRate / speechVolume を読み込み（runBlocking）
     ├─ OverlayManager.create(overlayAlpha)
-    ├─ TtsManager(speechRate, speechVolume, onInitialized = ::onTtsInitialized, onError)
-    └─ MqttManager(各コールバック).initialize()
+    └─ TtsManager(speechRate, speechVolume, onInitialized = ::onTtsInitialized, onError)
 
   onStartCommand(intent)
-    ├─ EXTRA_BOARD_ID を boardId にセット
+    ├─ EXTRA_SOURCES を applySources() に渡す（TTS 未初期化なら pendingSources に保留）
     ├─ EXTRA_MAX_MESSAGE_LENGTH を maxMessageLength にセット
     ├─ EXTRA_OVERLAY_ALPHA を overlayAlpha にセット
     ├─ EXTRA_SPEECH_RATE を speechRate にセットし TtsManager.setSpeechRate()
@@ -228,30 +262,70 @@ UI スイッチ OFF
     ├─ instance = null
     ├─ MessageManager.addSystemLog("サービスを停止しています...")
     ├─ OverlayManager.remove()
-    ├─ MqttManager.shutdown()
+    ├─ 全 CommentConnector.stop() → connectors/statuses/sources をクリア
     └─ TtsManager.shutdown()
   ```
+
+- **取得先の差分反映（`applySources(newSources)`）**:
+  1. `sources` を新しい一覧で置き換える
+  2. TTS が未初期化なら `pendingSources` に保留して抜ける（`onTtsInitialized()` で再開）
+  3. 一覧から消えた取得先と、接続先が変わった取得先（`!connectsTo`）を `stop()`
+  4. まだ繋いでいない取得先を `createConnector()` して `start()`
+  5. オーバーレイの状態を集約し直す
+
+  追加・編集・削除・起動のいずれもこの 1 経路を通る。
+  識別色だけの変更では接続を張り直さない。
 
 - **即時反映メソッド**:
 
   | メソッド | 処理 |
   |---|---|
-  | `applyOverlayEnabled(enabled: Boolean)` | `true` ならオーバーレイを `create(overlayAlpha)` で再作成（`mqttManager.connectionState` を確認し接続済み/切断状態を復元）、`false` なら `remove()` + `overlayManager = null` |
-  | `applyMaxMessageLength(length: Int)` | `maxMessageLength` フィールドを更新 |
-  | `applyOverlayAlpha(alpha: Int)` | `overlayAlpha` フィールドを更新し `OverlayManager.updateAlpha(alpha)` を呼び出す |
+  | `applyOverlayEnabled(enabled: Boolean)` | `true` ならオーバーレイを `create(overlayAlpha)` で再作成し、`OverlayManager.aggregateStatus(statuses)` で現在の状態を復元、`false` なら `remove()` + `overlayManager = null` |
 
-- **コールバック**:
+- **コールバック**（`CommentConnectorCallbacks`）:
 
   | コールバック | 処理 |
   |---|---|
-  | `onTtsInitialized()` | `MessageManager.addSystemLog`、TTS「じゃぱんくん-Vox 開始しました」、`MqttManager.connect(topic)` |
-  | `onMqttConnected()` | `MessageManager.addSystemLog`、`OverlayManager.showConnected()` |
-  | `onMqttDisconnected(cause)` | `MessageManager.addSystemLog`、`OverlayManager.showDisconnected()` |
-  | `onMessageReceived(message)` | `MessageManager.addMessage()`、`OverlayManager.updateMessage()`、`TtsManager.enqueue(ttsText)`（`maxMessageLength` 超過時は末尾を「以下略」で省略） |
+  | `onTtsInitialized()` | `MessageManager.addSystemLog`、TTS「じゃぱんくん-Vox 開始しました」、保留していた `pendingSources` があれば `applySources()` |
+  | `onStatusChanged(source, status)` | `statuses` を更新し `MessageManager.updateSourceStatus()`、`OverlayManager.showStatus(aggregateStatus(statuses))` |
+  | `onComment(comment)` | `MessageManager.addMessage()`、`TtsManager.enqueue(ttsText)`（`maxMessageLength` 超過時は末尾を「以下略」で省略）、読み上げ開始時に `OverlayManager.updateMessage()` |
+  | `onSystemLog(message)` | `MessageManager.addSystemLog()` |
+
+  オーバーレイに渡す取得先の ID は、取得先が 2 件以上あるときだけ付ける（1 件なら自明なので出さない）。
 
 ---
 
 ### 2.3 データ層（`data/` パッケージ）
+
+#### `CommentSource` / `SourceType`
+- **種別**: `data class` と `enum class`
+- **責務**: コメント取得先 1 件の設定を表す
+- **`SourceType`**: `JPNKN`（jpnkn 掲示板）、`TWICAS`（ツイキャス）。
+  永続化用の `id`、設定画面に出す `label` / `idFieldLabel` / `idFieldDescription`、
+  取得先の場所を表す `locationHint(sourceId)`（`bbs/xxx` / `twitcasting.tv/xxx`。ID が空なら空文字列）を持つ
+- **フィールド**:
+
+  | フィールド | 型 | 説明 |
+  |---|---|---|
+  | `uuid` | `String` | 内部識別子。ID を編集しても同じ取得先として追える |
+  | `type` | `SourceType` | 取得先の種別 |
+  | `sourceId` | `String` | 板 ID（jpnkn）／ユーザー ID（ツイキャス）。一覧やログの表示にも使う |
+  | `color` | `Int` | 識別色（ARGB。`AppConfig.Source.PALETTE` から選ぶ） |
+
+- **`connectsTo(other)`**: 種別と `sourceId` だけで比較する。
+  識別色を変えただけで接続を張り直さないために使う
+- **永続化**: `listToJson` / `listFromJson`。壊れた要素や未知の種別は読み飛ばし、残りは保つ
+- **移行（`migrateFromBoardId(boardId)`）**: 板 ID 1 つだけを持っていた頃の設定を
+  jpnkn の取得先 1 件に変換する。uuid は固定値（`legacy-jpnkn`）で、
+  保存される前に読み直しても別の取得先にならないようにしている
+
+#### `ReceivedComment`
+- **種別**: `data class`
+- **責務**: 取得先の種別によらないコメントの共通形。
+  これより先（読み上げ・オーバーレイ・ログ）は取得元を意識しない
+- **フィールド**: `sourceUuid` / `no`（jpnkn のレス番号。ツイキャスには相当するものが無く空文字列）/ `name` / `message`
+- **生成**: `fun JpnknMessage.toReceivedComment(sourceUuid): ReceivedComment`（拡張関数）、
+  ツイキャスは `TwicasConnector` が `TwicasComment` から組み立てる
 
 #### `JpnknMessage`
 - **種別**: `data class`
@@ -282,12 +356,13 @@ UI スイッチ OFF
   | フィールド | 型 | 生成元 |
   |---|---|---|
   | `id` | `String` | `UUID.randomUUID().toString()` |
-  | `no` | `String` | `JpnknMessage.no` |
-  | `name` | `String` | `JpnknMessage.extractName()` |
-  | `message` | `String` | `JpnknMessage.extractMessage()` |
+  | `no` | `String` | `ReceivedComment.no`（空なら表示しない） |
+  | `name` | `String` | `ReceivedComment.name` |
+  | `message` | `String` | `ReceivedComment.message` |
   | `timestamp` | `Long` | `System.currentTimeMillis()` |
+  | `sourceColor` | `Int` | `CommentSource.color` |
 
-- **生成**: `fun JpnknMessage.toLog(): MessageLog`（拡張関数）
+- **生成**: `fun ReceivedComment.toLog(source: CommentSource): MessageLog`（拡張関数）
 
 #### `MessageManager`
 - **種別**: `object`（シングルトン）
@@ -298,8 +373,10 @@ UI スイッチ OFF
   |---|---|---|
   | `messageLogs` | `StateFlow<List<MessageLog>>` | 500件（超過時に先頭から `drop`） |
   | `systemLogs` | `StateFlow<List<String>>` | 500件（同上） |
+  | `sourceStatuses` | `StateFlow<Map<String, SourceStatus>>` | — （uuid → 接続状態。設定画面の一覧に出す） |
 
 - **`addSystemLog` のフォーマット**: `[HH:mm:ss] テキスト`
+- **接続状態のメソッド**: `updateSourceStatus(uuid, status)` / `removeSourceStatus(uuid)` / `clearSourceStatuses()`
 
 #### `SettingsRepository`
 - **永続化**: `androidx.datastore:datastore-preferences`
@@ -307,7 +384,8 @@ UI スイッチ OFF
 
   | キー | 型 | デフォルト値 |
   |---|---|---|
-  | `board_id` | `stringPreferencesKey` | `""` （空文字） |
+  | `comment_sources` | `stringPreferencesKey` | 未保存時は `board_id` から移行 |
+  | `board_id` | `stringPreferencesKey` | `""` （移行元。取得先の保存後も消さずに残す） |
   | `overlay_enabled` | `booleanPreferencesKey` | `true` |
   | `max_message_length` | `intPreferencesKey` | `100`（`AppConfig.Tts.DEFAULT_MAX_MESSAGE_LENGTH`） |
   | `overlay_alpha` | `intPreferencesKey` | `80`（`AppConfig.Overlay.DEFAULT_ALPHA`） |
@@ -315,12 +393,57 @@ UI スイッチ OFF
   | `speech_volume` | `intPreferencesKey` | `80`（`AppConfig.Tts.DEFAULT_VOLUME`） |
   | `auto_start_on_launch` | `booleanPreferencesKey` | `false` |
 
-- **Flow プロパティ**: `boardIdFlow`・`overlayEnabledFlow`・`maxMessageLengthFlow`・`overlayAlphaFlow`・`speechRateFlow`・`speechVolumeFlow`・`autoStartOnLaunchFlow`
-- **保存メソッド**: `saveBoardId()`・`saveOverlayEnabled()`・`saveMaxMessageLength()`・`saveOverlayAlpha()`・`saveSpeechRate()`・`saveSpeechVolume()`・`saveAutoStartOnLaunch()`（各 `suspend fun`）
+- **Flow プロパティ**: `commentSourcesFlow`・`overlayEnabledFlow`・`maxMessageLengthFlow`・`overlayAlphaFlow`・`overlayTextSizeFlow`・`speechRateFlow`・`speechVolumeFlow`・`autoStartOnLaunchFlow`
+- **保存メソッド**: `saveCommentSources()`・`saveOverlayEnabled()`・`saveMaxMessageLength()`・`saveOverlayAlpha()`・`saveOverlayTextSize()`・`saveSpeechRate()`・`saveSpeechVolume()`・`saveAutoStartOnLaunch()`（各 `suspend fun`）
+- **`commentSourcesFlow` の移行**: `comment_sources` キーが無ければ `board_id` から
+  `CommentSource.migrateFromBoardId()` で組み立てる。移行結果はここでは保存せず、
+  次に取得先が編集された時点で書き込まれる
 
 ---
 
 ### 2.4 機能層
+
+#### `CommentConnector` / `SourceStatus`（`source/`）
+- **`CommentConnector`**: 取得先 1 件の接続を表すインターフェース（`source` / `start()` / `stop()`）。
+  jpnkn は MQTT、ツイキャスは WebSocket と手段が違うため、サービスからは同じ扱いにする
+- **`CommentConnectorCallbacks`**: `onStatusChanged` / `onComment` / `onSystemLog` の 3 つ
+- **`SourceStatus`**: `WAITING` / `CONNECTED` / `WAITING_BROADCAST` / `DISCONNECTED` / `ERROR`。
+  それぞれ表示文言（`label`）と、対処が要らない状態かどうか（`isHealthy`）を持つ
+  - `WAITING_BROADCAST`（ツイキャスの配信待ち）は待っているだけなので `isHealthy = true`。
+    ここを異常扱いにすると、配信していない間ずっとオーバーレイが警告色になる
+  - **`aggregate(statuses)`**: 複数の取得先の状態を 1 つにまとめる（オーバーレイは色を 1 つしか出せないため）。
+    `ERROR` > `DISCONNECTED` > 全部 `WAITING` なら `WAITING` > それ以外は `CONNECTED`。
+    取得先が無ければ `null`
+
+#### `JpnknConnector`（`source/`）
+- 既存の `MqttManager` を 1 取得先につき 1 つ持ち、通知を `CommentConnectorCallbacks` に流し替えるだけの薄い層
+- `start()` で `AppConfig.Mqtt.createTopic(sourceId)` を購読、`stop()` で `MqttManager.shutdown()`
+
+#### `TwicasConnector`（`source/`）
+- **責務**: 配信待ち → コメント受信 → 切断 を繰り返す状態遷移（コルーチンの 1 ループ）
+  1. `TwicasClient.fetchMovie()` で配信中かを確認。配信していなければ
+     `WAITING_BROADCAST` にして 5 秒待ち、繰り返す
+  2. 配信中なら `fetchCommentServerUrl()` → `openCommentSocket()` で `CONNECTED`
+  3. 切断されたら 5 秒待って 1 に戻る（枠の終了も回線断もこの経路）
+- ユーザーが見つからない場合は `ERROR`。通信エラーは `DISCONNECTED`
+- **接続時に過去のコメントは取得しない**。読み上げアプリで過去ログを喋り始めると事故になるため
+- 配信待ちは 5 秒ごとに回るので、状態が変わった瞬間だけシステムログに出す（`updateStatus`）
+
+#### `SourceTester`（`source/`）
+- **責務**: 取得先を登録する前に ID が正しいかを確かめる
+- jpnkn: 板の URL（`AppConfig.Jpnkn.BOARD_BASE_URL` + 板 ID）が引けるか。
+  MQTT はトピックの購読に成功しても板の実在までは分からないため、HTTP で確認する
+- ツイキャス: `TwicasClient.fetchMovie()` の結果で「配信中」「配信の開始を待つ」「ユーザーが見つからない」を出し分ける
+
+#### `TwicasClient` / `TwicasEvent`（`twicas/`）
+- **ライブラリ**: OkHttp（HTTP と WebSocket の両方）
+- 公式 API v2 ではなく認証不要の内部エンドポイントを使う。
+  仕様と選定理由は `docs/spec/twicas-comment-spec.md` を参照
+- **`TwicasClient`**: `fetchMovie()`（`streamserver.php`）、
+  `fetchCommentServerUrl()`（`eventpubsuburl.php`）、`openCommentSocket()`（WebSocket）。
+  回線が黙って切れたときに気付けるよう `pingInterval` を 30 秒に設定している
+- **`TwicasEvent`**: 応答のパースだけを担う純粋関数の置き場（ユニットテストあり）。
+  存在しないユーザーは HTTP 200 で `{}` が返るため、`movie` キーの有無で見分ける
 
 #### `MqttManager`（`mqtt/`）
 - **ライブラリ**: `com.hivemq:hivemq-mqtt-client:1.3.3`（MQTT v3.1.1）
@@ -333,7 +456,7 @@ UI スイッチ OFF
   | KeepAlive | 60秒 |
   | CleanSession | `true` |
   | QoS | `AT_MOST_ONCE`（QoS 0） |
-  | クライアント ID | `AppConfig.Mqtt.CLIENT_ID_PREFIX` + `_` + 起動時刻（ms） |
+  | クライアント ID | `AppConfig.Mqtt.CLIENT_ID_PREFIX` + `_` + `UUID.randomUUID()`（取得先ごとに 1 本張るため、同時生成でも衝突しない値にしている） |
 
 - **自動再接続**: 手動リトライ方式（指数バックオフ、試行回数上限なし）
   - 初回遅延: `AppConfig.Mqtt.INITIAL_RETRY_DELAY_MS`（1000ms）
@@ -421,17 +544,20 @@ Scaffold
 
 #### `HomeScreen`
 - **データ源**: `MessageManager.messageLogs.collectAsState()`
+- **並び順**: 新着が上（`messageLogs.asReversed()`）
 - **リスト**: `LazyColumn`（`key = { it.id }`）
 - **自動スクロール**:
-  - `isAtBottom`: `derivedStateOf { lastVisibleIndex >= totalItems - 2 }`
-  - `LaunchedEffect(messageLogs.size)` で `isAtBottom == true` のときのみ `animateScrollToItem(末尾)`
+  - `isAtTop`: `derivedStateOf { listState.firstVisibleItemIndex == 0 }`
+  - `LaunchedEffect(size)` で `isAtTop == true` のときのみ `animateScrollToItem(0)`
+  - 読み返している最中に先頭へ引き戻さないため、先頭にいるときだけ追従する
 - **各アイテムレイアウト**:
   ```
-  [no] name（Bold）
+  ▌[no] name（Bold）      ← ▌は取得先の識別色。no は空なら出さない
   ─────────────────
   message（制限なし）
                           HH:mm:ss（Gray）
   ```
+  取得先は色だけで示し、板 ID などの文字は出さない
 
 #### `LogScreen`
 - **データ源**: `MessageManager.systemLogs.collectAsState()`（`logMessages` 引数はフォールバック）
@@ -443,8 +569,12 @@ Scaffold
 
   | 引数 | 型 | 説明 |
   |---|---|---|
-  | `boardId` | `String` | 現在の板 ID |
-  | `onBoardIdChange` | `(String) -> Unit` | 板 ID 変更コールバック |
+  | `sources` | `List<CommentSource>` | コメント取得先の一覧 |
+  | `sourceStatuses` | `Map<String, SourceStatus>` | uuid ごとの接続状態 |
+  | `onAddSource` | `(SourceType, String, String, Int) -> Unit` | 取得先の追加 |
+  | `onUpdateSource` | `(String, String, String, Int) -> Unit` | 取得先の更新（第 1 引数は uuid） |
+  | `onRemoveSource` | `(String) -> Unit` | 取得先の削除 |
+  | `onTestSource` | `(SourceType, String, (SourceTestResult) -> Unit) -> Unit` | 接続テスト |
   | `isServiceRunning` | `Boolean` | サービス稼働中フラグ |
   | `hasNotificationPermission` | `Boolean` | 通知権限状態 |
   | `hasOverlayPermission` | `Boolean` | オーバーレイ権限状態 |
@@ -464,14 +594,23 @@ Scaffold
   | `onRequestNotificationPermission` | `() -> Unit` | 通知権限リクエスト |
   | `onRequestOverlayPermission` | `() -> Unit` | オーバーレイ権限リクエスト |
 
-- **レイアウト**: `docs/references/jpnkn-vox-settings.html` のモックアップに準拠。カードは使わず、セクション見出し（`HorizontalDivider` + `labelMedium` / primary 色）と行リストで構成する
+- **レイアウト**: `docs/references/jpnkn-vox-settings-inline.html` のモックアップに準拠。カードは使わず、セクション見出し（`HorizontalDivider` + `labelMedium` / primary 色）と行リストで構成する
 - **構成**:
   1. **権限バナー（`PermissionBanner`）**: 未許可のオーバーレイ権限・通知権限それぞれについて `errorContainer` 色のバナーを表示。タップで権限リクエストへ進む。許可済みの権限はバナーごと消える
-  2. **接続**: 板 ID 行（副題にトピック `bbs/{id}` をモノスペース表示、右端に現在値）。タップで編集ダイアログを開く。サービス稼働中は行を無効化し副題を「サービス稼働中は変更できません」に差し替える
+  2. **コメント取得先**: 取得先ごとに 1 行（左端に識別色の帯、副題に `jpnkn · bbs/xxx` をモノスペース表示、右端に接続状態）。行タップで編集シート、末尾に「コメント取得先を追加」。1 件も無ければ「まだ登録されていません」を出す。**稼働中でも追加・削除できる**（その場で接続・切断される）
   3. **読み上げ**: 話す速度スライダー（50〜200 %、`1.2x` 形式で表示）／音量スライダー（0〜100 %）／最大文字数行（ダイアログで編集）／テスト再生ボタン（`OutlinedButton`）
-  4. **表示**: オーバーレイ表示スイッチ（オーバーレイ権限がない場合は無効）／背景の濃さスライダー（オーバーレイ権限がないか OFF の場合は無効）
+  4. **表示**: オーバーレイ表示スイッチ（オーバーレイ権限がない場合は無効）／背景の濃さスライダー／文字の大きさ（オーバーレイ権限がないか OFF の場合は無効）
   5. **動作**: 起動時に自動で開始スイッチ（アプリを開いたときにサービスを自動開始する。端末の再起動時ではない）
-- **共通部品**: `SettingRow`（タップで編集）・`SwitchSettingRow`・`SliderSettingRow`・`EditValueDialog`（板 ID と最大文字数で共用。`sanitize` で入力文字を制限し、`isValid` で保存ボタンを制御）
+- **取得先の編集シート（`SourceEditSheet`）**: `ModalBottomSheet`（`skipPartiallyExpanded = true`。
+  接続テストの結果で中身の高さが変わるたびにシートが初期位置まで下がるのを防ぐため、常に全開で使う）。
+  サービス種別（追加時のみ `SingleChoiceSegmentedButtonRow` で選ぶ。**編集時は変更不可**で、
+  選べない選択肢を並べると押せる物に見えるため、ただの文字として出す。
+  接続先が変わると別の取得先と区別が付かなくなるので、変えたい場合は削除して追加し直す）／
+  ID 欄（`supportingText` は、未入力なら何を入れる欄かの説明、入力済みなら `bbs/xxx` などの取得先の場所に切り替える）／
+  識別色（`AppConfig.Source.PALETTE` の 7 色。選択中はチェックと、少し離した位置のリングで示す。
+  円の縁に線を引くだけだと濃い色で線が埋もれるため）／接続をテスト／追加・保存／削除（編集時のみ）
+- **接続状態の表示**: サービス停止中は接続していないので、状態によらず「待機」に見せる
+- **共通部品**: `SettingRow`（タップで編集）・`SwitchSettingRow`・`SliderSettingRow`・`ChoiceDialog`・`EditValueDialog`（`sanitize` で入力文字を制限し、`isValid` で保存ボタンを制御）
 - **スライダーの保存タイミング**: ドラッグ中は内部状態のみ更新し、指を離した時点（`onValueChangeFinished`）で永続化とサービス反映を行う
 - **スライダーの刻み**: トラック上に目盛りが表示されるのを避けるため、いずれのスライダーも `steps` は設定せず連続値で扱う
 
@@ -498,6 +637,14 @@ sealed class Screen(route, title, icon)
 | `Mqtt` | `INITIAL_RETRY_DELAY_MS` | `1000L` |
 | `Mqtt` | `MAX_RETRY_DELAY_MS` | `60000L` |
 | `Mqtt` | `MAX_RETRY_ATTEMPTS` | `10` |
+| `Jpnkn` | `BOARD_BASE_URL` | `https://bbs.jpnkn.com/`（接続テストで板の実在確認に使う） |
+| `Twicas` | `STREAM_SERVER_URL` | `https://twitcasting.tv/streamserver.php` |
+| `Twicas` | `EVENT_PUBSUB_URL` | `https://twitcasting.tv/eventpubsuburl.php` |
+| `Twicas` | `BROADCAST_POLLING_INTERVAL_MS` | `5000L`（配信開始待ちのポーリング間隔） |
+| `Twicas` | `RECONNECT_DELAY_MS` | `5000L` |
+| `Twicas` | `PING_INTERVAL_SEC` | `30L` |
+| `Twicas` | `REQUEST_TIMEOUT_SEC` | `15L` |
+| `Source` | `PALETTE` | 識別色 7 色（赤・黄・緑・水色・青・紫・桃。色相順） |
 | `Notification` | `CHANNEL_ID` | `jpnkn_vox_channel` |
 | `Notification` | `CHANNEL_NAME` | `JPNKN Vox サービス` |
 | `Notification` | `ID` | `1` |

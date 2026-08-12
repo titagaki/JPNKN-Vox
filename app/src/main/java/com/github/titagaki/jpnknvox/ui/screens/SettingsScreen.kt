@@ -1,23 +1,36 @@
 package com.github.titagaki.jpnknvox.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.github.titagaki.jpnknvox.config.AppConfig
+import com.github.titagaki.jpnknvox.data.CommentSource
+import com.github.titagaki.jpnknvox.data.SourceType
+import com.github.titagaki.jpnknvox.source.SourceStatus
+import com.github.titagaki.jpnknvox.source.SourceTestResult
 
 /**
  * オーバーレイの文字の大きさとして選べる段階（sp と表示名）
@@ -34,13 +47,17 @@ private val TEXT_SIZE_PRESETS: List<Pair<Int, String>> = listOf(
 /**
  * 設定画面
  *
- * `docs/references/jpnkn-vox-settings.html` のモックアップに沿った
+ * `docs/references/jpnkn-vox-settings-inline.html` のモックアップに沿った
  * セクション見出し＋行リスト形式のレイアウト。
  */
 @Composable
 fun SettingsScreen(
-    boardId: String,
-    onBoardIdChange: (String) -> Unit,
+    sources: List<CommentSource>,
+    sourceStatuses: Map<String, SourceStatus>,
+    onAddSource: (SourceType, String, Int) -> Unit,
+    onUpdateSource: (String, String, Int) -> Unit,
+    onRemoveSource: (String) -> Unit,
+    onTestSource: (SourceType, String, (SourceTestResult) -> Unit) -> Unit,
     isServiceRunning: Boolean,
     hasNotificationPermission: Boolean,
     hasOverlayPermission: Boolean,
@@ -63,9 +80,11 @@ fun SettingsScreen(
     onRequestOverlayPermission: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var showBoardIdDialog by remember { mutableStateOf(false) }
     var showMaxLengthDialog by remember { mutableStateOf(false) }
     var showTextSizeDialog by remember { mutableStateOf(false) }
+
+    // 編集シートの対象。null なら閉じている。追加のときは editingSource が null の Add
+    var sheetTarget by remember { mutableStateOf<SourceSheetTarget?>(null) }
 
     Column(
         modifier = modifier
@@ -88,20 +107,26 @@ fun SettingsScreen(
             )
         }
 
-        // ========== 接続 ==========
-        SectionHeader(title = "接続", showDivider = false)
-        SettingRow(
-            title = "板 ID",
-            subtitle = when {
-                isServiceRunning -> "サービス稼働中は変更できません"
-                boardId.isBlank() -> "タップして読み上げる板を設定します"
-                else -> AppConfig.Mqtt.createTopic(boardId)
-            },
-            subtitleMonospace = !isServiceRunning && boardId.isNotBlank(),
-            value = boardId.ifBlank { "未設定" },
-            enabled = !isServiceRunning,
-            onClick = { showBoardIdDialog = true }
-        )
+        // ========== コメント取得先 ==========
+        SectionHeader(title = "コメント取得先", showDivider = false)
+        if (sources.isEmpty()) {
+            Text(
+                text = "まだ登録されていません",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+            )
+        } else {
+            sources.forEach { source ->
+                SourceRow(
+                    source = source,
+                    status = sourceStatuses[source.uuid],
+                    isServiceRunning = isServiceRunning,
+                    onClick = { sheetTarget = SourceSheetTarget(source) }
+                )
+            }
+        }
+        AddSourceRow(onClick = { sheetTarget = SourceSheetTarget(null) })
 
         // ========== 読み上げ ==========
         SectionHeader(title = "読み上げ")
@@ -176,19 +201,25 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
     }
 
-    if (showBoardIdDialog) {
-        EditValueDialog(
-            title = "板 ID",
-            initialValue = boardId,
-            label = "板 ID",
-            supportingText = "読み上げる板の ID を入力してください (例: mamiko)",
-            keyboardType = KeyboardType.Text,
-            sanitize = { input -> input.filter { it.isLetterOrDigit() || it == '_' } },
-            isValid = { it.isNotBlank() },
-            onDismiss = { showBoardIdDialog = false },
-            onConfirm = {
-                onBoardIdChange(it)
-                showBoardIdDialog = false
+    sheetTarget?.let { target ->
+        SourceEditSheet(
+            editingSource = target.source,
+            // 追加のたびに色をずらし、既定のままでも取得先を見分けられるようにする
+            defaultColor = AppConfig.Source.PALETTE[sources.size % AppConfig.Source.PALETTE.size],
+            onDismiss = { sheetTarget = null },
+            onTest = onTestSource,
+            onSave = { type, sourceId, color ->
+                val editing = target.source
+                if (editing == null) {
+                    onAddSource(type, sourceId, color)
+                } else {
+                    onUpdateSource(editing.uuid, sourceId, color)
+                }
+                sheetTarget = null
+            },
+            onDelete = {
+                target.source?.let { onRemoveSource(it.uuid) }
+                sheetTarget = null
             }
         )
     }
@@ -225,8 +256,364 @@ fun SettingsScreen(
 }
 
 // ========================================
+// コメント取得先
+// ========================================
+
+/**
+ * 編集シートを開く対象
+ *
+ * @param source 編集する取得先。null なら新規追加
+ */
+private data class SourceSheetTarget(val source: CommentSource?)
+
+/**
+ * 取得先 1 件の行
+ *
+ * 左端に識別色の帯、右端に接続状態を出す。
+ * 停止中は接続していないので、状態は「待機」に見せる。
+ */
+@Composable
+private fun SourceRow(
+    source: CommentSource,
+    status: SourceStatus?,
+    isServiceRunning: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 4.dp, height = 36.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Color(source.color))
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            // 等幅にすると 1 文字ずつが広がって全角のように見えるので、本文と同じ書体で出す
+            Text(
+                text = source.sourceId,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = source.type.label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 3.dp)
+            )
+        }
+        SourceStatusLabel(status = status, isServiceRunning = isServiceRunning)
+    }
+}
+
+/**
+ * 行の右端に出す接続状態
+ */
+@Composable
+private fun SourceStatusLabel(status: SourceStatus?, isServiceRunning: Boolean) {
+    val effectiveStatus = if (isServiceRunning) status else null
+
+    val (text, color) = when {
+        effectiveStatus == null -> "待機" to MaterialTheme.colorScheme.onSurfaceVariant
+        effectiveStatus == SourceStatus.CONNECTED -> effectiveStatus.label to CONNECTED_COLOR
+        effectiveStatus.isHealthy -> effectiveStatus.label to MaterialTheme.colorScheme.onSurfaceVariant
+        else -> effectiveStatus.label to MaterialTheme.colorScheme.error
+    }
+
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        color = color
+    )
+}
+
+/**
+ * 取得先を追加する行
+ */
+@Composable
+private fun AddSourceRow(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Add,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            text = "コメント取得先を追加",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+/**
+ * 取得先の追加・編集シート
+ *
+ * 種別は追加時にしか選べない。接続先が変わると別の取得先と区別が付かなくなるため、
+ * 変えたい場合は削除して追加し直してもらう。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SourceEditSheet(
+    editingSource: CommentSource?,
+    defaultColor: Int,
+    onDismiss: () -> Unit,
+    onTest: (SourceType, String, (SourceTestResult) -> Unit) -> Unit,
+    onSave: (SourceType, String, Int) -> Unit,
+    onDelete: () -> Unit
+) {
+    val isEditing = editingSource != null
+
+    var type by remember { mutableStateOf(editingSource?.type ?: SourceType.JPNKN) }
+    var sourceId by remember { mutableStateOf(editingSource?.sourceId ?: "") }
+    var color by remember { mutableIntStateOf(editingSource?.color ?: defaultColor) }
+    var testResult by remember { mutableStateOf<SourceTestResult?>(null) }
+    var isTesting by remember { mutableStateOf(false) }
+
+    // 接続テストの結果が出ると中身の高さが変わる。半開き状態を許すと
+    // そのたびにシートが初期位置まで下がってしまうので、常に全開で使う
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = if (isEditing) editingSource.sourceId else "コメント取得先を追加",
+                style = MaterialTheme.typography.headlineSmall
+            )
+            Text(
+                text = if (isEditing) {
+                    "サービスの種類は変更できません。変える場合は削除して追加し直してください。"
+                } else {
+                    "読み上げたい掲示板や配信を登録します。稼働中でもそのまま追加できます。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            SheetFieldLabel("サービス")
+            if (isEditing) {
+                // 選べない選択肢を並べても押せる物に見えてしまうので、
+                // 編集中はただの文字として出す（変えられないことは上の説明で伝える）
+                Text(
+                    text = type.label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
+                )
+            } else {
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    SourceType.entries.forEachIndexed { index, entry ->
+                        SegmentedButton(
+                            selected = type == entry,
+                            onClick = {
+                                type = entry
+                                sourceId = ""
+                                testResult = null
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(
+                                index = index,
+                                count = SourceType.entries.size
+                            )
+                        ) {
+                            Text(entry.label)
+                        }
+                    }
+                }
+            }
+
+            SheetFieldLabel(type.idFieldLabel)
+            OutlinedTextField(
+                value = sourceId,
+                onValueChange = { input ->
+                    sourceId = input.filter { it.isLetterOrDigit() || it == '_' || it == ':' }
+                    testResult = null
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                supportingText = {
+                    // 未入力なら何を入れる欄かを説明し、
+                    // 入力済みならその ID がどこを指すかに切り替える
+                    val hint = type.locationHint(sourceId)
+                    Text(
+                        text = hint.ifEmpty { type.idFieldDescription },
+                        fontFamily = if (hint.isEmpty()) null else FontFamily.Monospace
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            SheetFieldLabel("識別色")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                AppConfig.Source.PALETTE.forEach { paletteColor ->
+                    ColorSwatch(
+                        color = paletteColor,
+                        selected = paletteColor == color,
+                        onClick = { color = paletteColor }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            OutlinedButton(
+                onClick = {
+                    isTesting = true
+                    testResult = null
+                    onTest(type, sourceId) { result ->
+                        testResult = result
+                        isTesting = false
+                    }
+                },
+                enabled = !isTesting,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isTesting) "接続を確認しています…" else "接続をテスト")
+            }
+
+            testResult?.let { result ->
+                val (message, resultColor) = when (result) {
+                    is SourceTestResult.Success -> result.message to CONNECTED_COLOR
+                    is SourceTestResult.Failure -> result.message to MaterialTheme.colorScheme.error
+                }
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = resultColor
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Button(
+                onClick = { onSave(type, sourceId, color) },
+                enabled = sourceId.isNotBlank(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isEditing) "保存する" else "追加する")
+            }
+
+            if (isEditing) {
+                OutlinedButton(
+                    onClick = onDelete,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("削除する")
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 編集シートの中の項目名
+ */
+@Composable
+private fun SheetFieldLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 10.dp)
+    )
+}
+
+/**
+ * 識別色の選択肢 1 つ
+ *
+ * 選択中はチェックと、少し離した位置のリングの 2 つで示す。
+ * 円の縁に線を引くだけだと、濃い色では線が色に埋もれて分かりにくい。
+ * 外側の枠は選択中だけ描くが、大きさは常に同じにして並びがずれないようにする。
+ */
+@Composable
+private fun ColorSwatch(
+    color: Int,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val swatchColor = Color(color)
+
+    Box(
+        modifier = Modifier
+            .size(SWATCH_TOTAL_SIZE)
+            .then(
+                if (selected) {
+                    Modifier.border(width = 2.dp, color = swatchColor, shape = CircleShape)
+                } else {
+                    Modifier
+                }
+            )
+            .clickable(onClick = onClick)
+            .padding(SWATCH_RING_GAP)
+            .clip(CircleShape)
+            .background(swatchColor),
+        contentAlignment = Alignment.Center
+    ) {
+        if (selected) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                // 白と黒のどちらが読めるかの境目。単純に 0.5 で切ると、
+                // 黄色や水色のように明るく見える色にも白が載って埋もれる
+                tint = if (swatchColor.luminance() > CONTRAST_LUMINANCE_THRESHOLD) {
+                    Color.Black
+                } else {
+                    Color.White
+                },
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+/** 識別色の選択肢 1 つ分の大きさ（選択中のリングを含む） */
+private val SWATCH_TOTAL_SIZE = 44.dp
+
+/** リングと色の円のあいだの隙間 */
+private val SWATCH_RING_GAP = 5.dp
+
+/**
+ * 色の上に白と黒のどちらを載せるかの境目となる相対輝度
+ *
+ * これより明るい色には黒を載せた方が読める（WCAG の相対輝度で、
+ * 白との対比と黒との対比が入れ替わる点）。
+ */
+private const val CONTRAST_LUMINANCE_THRESHOLD = 0.179f
+
+// ========================================
 // 部品
 // ========================================
+
+/**
+ * 接続中であることを示す色
+ *
+ * TopAppBar の稼働中表示と同じ緑。テーマの色にはこの意味を持つ色が無いため直接指定する。
+ */
+private val CONNECTED_COLOR = Color(0xFF4CAF50)
 
 /**
  * 未許可の権限を知らせるバナー。タップで権限要求に進む

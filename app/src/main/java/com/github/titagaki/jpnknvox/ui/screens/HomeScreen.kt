@@ -1,14 +1,16 @@
 package com.github.titagaki.jpnknvox.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -59,19 +61,18 @@ fun HomeScreen(
     } else {
         val listState = rememberLazyListState()
 
-        // ユーザーが末尾付近にいるかどうかを判定
-        val isAtBottom by remember {
-            derivedStateOf {
-                val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()
-                    ?: return@derivedStateOf true
-                lastVisibleItem.index >= listState.layoutInfo.totalItemsCount - 2
-            }
+        // 新着が上に来るよう、受信順とは逆に並べる
+        val newestFirst = messageLogs.asReversed()
+
+        // ユーザーが先頭にいるかどうかを判定。読み返している最中に
+        // 先頭へ引き戻さないため、新着で自動スクロールするのは先頭にいるときだけにする
+        val isAtTop by remember {
+            derivedStateOf { listState.firstVisibleItemIndex == 0 }
         }
 
-        // リストサイズが変化したとき、末尾にいる場合のみ自動スクロール
-        LaunchedEffect(messageLogs.size) {
-            if (isAtBottom) {
-                listState.animateScrollToItem(maxOf(0, messageLogs.size - 1))
+        LaunchedEffect(newestFirst.size) {
+            if (isAtTop) {
+                listState.animateScrollToItem(0)
             }
         }
 
@@ -84,7 +85,7 @@ fun HomeScreen(
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
             items(
-                items = messageLogs,
+                items = newestFirst,
                 key = { it.id }
             ) { log ->
                 PostCard(log = log)
@@ -111,11 +112,21 @@ private fun PostCard(log: MessageLog) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "[${log.no}]",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
+                // 取得先は色だけで示す。どこから来たかは見分けられればよく、
+                // ID を並べても読む情報が増えるわけではないため
+                Box(
+                    modifier = Modifier
+                        .size(width = 3.dp, height = 14.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color(log.sourceColor))
                 )
+                if (log.no.isNotBlank()) {
+                    Text(
+                        text = "[${log.no}]",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
                 Text(
                     text = log.name,
                     style = MaterialTheme.typography.labelMedium,
