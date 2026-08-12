@@ -5,7 +5,19 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val appVersion = "0.1.3"
+val appVersion = "0.2.0"
+
+/**
+ * versionName から versionCode を作る（0.2.0 → 200、1.0.0 → 10000）
+ *
+ * versionCode は OS が「どちらが新しいか」を比べるためだけの整数で、
+ * 小さい値の APK は上書きインストールできない。
+ * 桁を固定せずに繋げると 0.1.10（110）より 0.2.0（20）が小さくなって逆転するため、
+ * minor と patch に 2 桁ずつ割り当てて計算する（それぞれ 0〜99 まで）。
+ */
+val appVersionCode = appVersion.split(".")
+    .map { it.toInt() }
+    .let { (major, minor, patch) -> major * 10000 + minor * 100 + patch }
 
 // local.properties から署名情報を読み込む
 val localProperties = Properties()
@@ -24,7 +36,7 @@ android {
         applicationId = "com.github.titagaki.jpnknvox"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
+        versionCode = appVersionCode
         versionName = appVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

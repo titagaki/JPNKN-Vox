@@ -6,7 +6,7 @@ JPNKN掲示板（bbs.jpnkn.com）とツイキャスのリアルタイムコメ�
 取得先は複数登録でき、同時に読み上げる。IRL配信（屋外配信）での手放し運用を想定。
 
 **パッケージ名:** `com.github.titagaki.jpnknvox`
-**バージョン:** 0.1.3
+**バージョン:** 0.2.0
 **最小SDK:** Android 12 (API 31)
 
 ## 技術スタック
@@ -41,6 +41,9 @@ JPNKN掲示板（bbs.jpnkn.com）とツイキャスのリアルタイムコメ�
 
 出力APK名: `JPNKNVox-{debug|release}-{バージョン}.apk`
 （`assembleXxx` の直後は `app-{debug|release}.apk`。`renameDebugApk` / `renameReleaseApk` を実行するとリネームされる）
+
+バージョンを上げるときは `app/build.gradle.kts` の `appVersion` とこのファイルの記載を直す。
+`versionCode` は `appVersion` から自動算出されるので触らない（0.2.0 → 200）。
 
 > Windows では `.\gradlew.bat` を使用。JAVA_HOME 未設定の場合:
 > `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`
