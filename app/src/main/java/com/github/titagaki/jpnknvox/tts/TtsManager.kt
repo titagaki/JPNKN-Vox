@@ -35,7 +35,7 @@ class TtsManager(
 
     companion object {
         private const val TAG = "TtsManager"
-        private const val SPEECH_INTERVAL_MS = 500L
+        private const val SPEECH_INTERVAL_MS = 2000L
     }
 
     private var tts: TextToSpeech? = TextToSpeech(context, this)
