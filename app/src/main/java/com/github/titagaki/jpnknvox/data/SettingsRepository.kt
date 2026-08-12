@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.github.titagaki.jpnknvox.config.AppConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -26,6 +27,9 @@ class SettingsRepository(private val context: Context) {
         private val OVERLAY_ENABLED_KEY = booleanPreferencesKey("overlay_enabled")
         private val MAX_MESSAGE_LENGTH_KEY = intPreferencesKey("max_message_length")
         private val OVERLAY_ALPHA_KEY = intPreferencesKey("overlay_alpha")
+        private val SPEECH_RATE_KEY = intPreferencesKey("speech_rate")
+        private val SPEECH_VOLUME_KEY = intPreferencesKey("speech_volume")
+        private val AUTO_START_ON_LAUNCH_KEY = booleanPreferencesKey("auto_start_on_launch")
     }
 
     /**
@@ -49,7 +53,7 @@ class SettingsRepository(private val context: Context) {
      */
     val maxMessageLengthFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
-            preferences[MAX_MESSAGE_LENGTH_KEY] ?: 100
+            preferences[MAX_MESSAGE_LENGTH_KEY] ?: AppConfig.Tts.DEFAULT_MAX_MESSAGE_LENGTH
         }
 
     /**
@@ -57,7 +61,31 @@ class SettingsRepository(private val context: Context) {
      */
     val overlayAlphaFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
-            preferences[OVERLAY_ALPHA_KEY] ?: 80
+            preferences[OVERLAY_ALPHA_KEY] ?: AppConfig.Overlay.DEFAULT_ALPHA
+        }
+
+    /**
+     * 話す速度を取得（Flow）。100 で等倍の百分率
+     */
+    val speechRateFlow: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[SPEECH_RATE_KEY] ?: AppConfig.Tts.DEFAULT_SPEECH_RATE
+        }
+
+    /**
+     * 読み上げ音量を取得（Flow）。0〜100 の整数（%）
+     */
+    val speechVolumeFlow: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[SPEECH_VOLUME_KEY] ?: AppConfig.Tts.DEFAULT_VOLUME
+        }
+
+    /**
+     * アプリ起動時の自動開始が有効かを取得（Flow）
+     */
+    val autoStartOnLaunchFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[AUTO_START_ON_LAUNCH_KEY] ?: false
         }
 
     /**
@@ -101,6 +129,39 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveOverlayAlpha(alpha: Int) {
         context.dataStore.edit { preferences ->
             preferences[OVERLAY_ALPHA_KEY] = alpha
+        }
+    }
+
+    /**
+     * 話す速度を保存
+     *
+     * @param rate 100 で等倍の百分率
+     */
+    suspend fun saveSpeechRate(rate: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[SPEECH_RATE_KEY] = rate
+        }
+    }
+
+    /**
+     * 読み上げ音量を保存
+     *
+     * @param volume 0〜100 の整数（%）
+     */
+    suspend fun saveSpeechVolume(volume: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[SPEECH_VOLUME_KEY] = volume
+        }
+    }
+
+    /**
+     * アプリ起動時の自動開始を保存
+     *
+     * @param enabled 自動開始を有効にするか
+     */
+    suspend fun saveAutoStartOnLaunch(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[AUTO_START_ON_LAUNCH_KEY] = enabled
         }
     }
 }

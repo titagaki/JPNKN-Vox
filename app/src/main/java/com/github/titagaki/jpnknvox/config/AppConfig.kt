@@ -37,9 +37,29 @@ object AppConfig {
     }
 
 
+    // 読み上げ設定
+    object Tts {
+        /** 話す速度（%）。100 で等倍 */
+        const val DEFAULT_SPEECH_RATE = 120
+        const val MIN_SPEECH_RATE = 50
+        const val MAX_SPEECH_RATE = 200
+
+        /** 音量（0〜100 %） */
+        const val DEFAULT_VOLUME = 80
+
+        /** 読み上げるメッセージの最大文字数 */
+        const val DEFAULT_MAX_MESSAGE_LENGTH = 100
+
+        /** テスト再生で読み上げるテキスト */
+        const val TEST_TEXT = "じゃぱんくん-Vox のテスト再生です"
+    }
+
     // オーバーレイ設定
     object Overlay {
         const val MAX_MESSAGE_LENGTH = 30
+
+        /** 背景の濃さの既定値（0〜100 %） */
+        const val DEFAULT_ALPHA = 80
         const val INITIAL_Y_POSITION = 100
         const val STATUS_TEXT_SIZE = 14f
         const val MESSAGE_TEXT_SIZE = 12f

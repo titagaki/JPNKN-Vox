@@ -1,8 +1,9 @@
 package com.github.titagaki.jpnknvox
 
-import android.app.Application
+import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.github.titagaki.jpnknvox.config.AppConfig
 import com.github.titagaki.jpnknvox.data.MessageManager
 
 /**
@@ -11,26 +12,32 @@ import com.github.titagaki.jpnknvox.data.MessageManager
  * MainViewModel からサービス制御ロジックを分離し、
  * ViewModel が UI 状態の保持のみに専念できるようにする。
  */
-class ServiceController(private val application: Application) {
+class ServiceController(context: Context) {
 
     companion object {
         private const val TAG = "ServiceController"
     }
 
-    fun start(boardId: String, maxMessageLength: Int = 100, overlayAlpha: Int = 80) {
-        val intent = Intent(application, JpnknVoxService::class.java).apply {
+    private val appContext: Context = context.applicationContext
+
+    fun start(
+        boardId: String,
+        maxMessageLength: Int = AppConfig.Tts.DEFAULT_MAX_MESSAGE_LENGTH,
+        overlayAlpha: Int = AppConfig.Overlay.DEFAULT_ALPHA
+    ) {
+        val intent = Intent(appContext, JpnknVoxService::class.java).apply {
             putExtra(JpnknVoxService.EXTRA_BOARD_ID, boardId)
             putExtra(JpnknVoxService.EXTRA_MAX_MESSAGE_LENGTH, maxMessageLength)
             putExtra(JpnknVoxService.EXTRA_OVERLAY_ALPHA, overlayAlpha)
         }
-        application.startForegroundService(intent)
+        appContext.startForegroundService(intent)
         MessageManager.addSystemLog("サービスを開始しました (板: $boardId)")
         Log.d(TAG, "JpnknVoxService started with board ID: $boardId, max message length: $maxMessageLength, overlay alpha: $overlayAlpha")
     }
 
     fun stop() {
-        val intent = Intent(application, JpnknVoxService::class.java)
-        application.stopService(intent)
+        val intent = Intent(appContext, JpnknVoxService::class.java)
+        appContext.stopService(intent)
         MessageManager.addSystemLog("サービスを停止しました")
         Log.d(TAG, "JpnknVoxService stopped")
     }
@@ -41,9 +48,9 @@ class ServiceController(private val application: Application) {
      * @param enabled true でオーバーレイを表示、false で非表示
      */
     fun setOverlayEnabled(enabled: Boolean) {
-        val intent = Intent(application, JpnknVoxService::class.java)
+        val intent = Intent(appContext, JpnknVoxService::class.java)
             .putExtra(JpnknVoxService.EXTRA_OVERLAY_ENABLED, enabled)
-        application.startService(intent)
+        appContext.startService(intent)
         Log.d(TAG, "Overlay enabled set to: $enabled")
     }
 
@@ -53,9 +60,9 @@ class ServiceController(private val application: Application) {
      * @param length 最大文字数
      */
     fun setMaxMessageLength(length: Int) {
-        val intent = Intent(application, JpnknVoxService::class.java)
+        val intent = Intent(appContext, JpnknVoxService::class.java)
             .putExtra(JpnknVoxService.EXTRA_MAX_MESSAGE_LENGTH, length)
-        application.startService(intent)
+        appContext.startService(intent)
         Log.d(TAG, "Max message length set to: $length")
     }
 
@@ -65,10 +72,34 @@ class ServiceController(private val application: Application) {
      * @param alpha 0〜100 の整数（%）
      */
     fun setOverlayAlpha(alpha: Int) {
-        val intent = Intent(application, JpnknVoxService::class.java)
+        val intent = Intent(appContext, JpnknVoxService::class.java)
             .putExtra(JpnknVoxService.EXTRA_OVERLAY_ALPHA, alpha)
-        application.startService(intent)
+        appContext.startService(intent)
         Log.d(TAG, "Overlay alpha set to: $alpha")
+    }
+
+    /**
+     * 話す速度をサービスに即時反映する
+     *
+     * @param rate 100 で等倍の百分率
+     */
+    fun setSpeechRate(rate: Int) {
+        val intent = Intent(appContext, JpnknVoxService::class.java)
+            .putExtra(JpnknVoxService.EXTRA_SPEECH_RATE, rate)
+        appContext.startService(intent)
+        Log.d(TAG, "Speech rate set to: $rate")
+    }
+
+    /**
+     * 読み上げ音量をサービスに即時反映する
+     *
+     * @param volume 0〜100 の整数（%）
+     */
+    fun setSpeechVolume(volume: Int) {
+        val intent = Intent(appContext, JpnknVoxService::class.java)
+            .putExtra(JpnknVoxService.EXTRA_SPEECH_VOLUME, volume)
+        appContext.startService(intent)
+        Log.d(TAG, "Speech volume set to: $volume")
     }
 }
 

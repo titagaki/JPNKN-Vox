@@ -41,6 +41,10 @@ class MainActivity : ComponentActivity() {
         private const val TAG = "MainActivity"
     }
 
+    // 権限状態。onResume で更新し、権限画面から戻った直後の表示に反映する
+    private var hasNotificationPermission by mutableStateOf(false)
+    private var hasOverlayPermission by mutableStateOf(false)
+
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -49,11 +53,13 @@ class MainActivity : ComponentActivity() {
         } else {
             Log.w(TAG, "Notification permission denied")
         }
+        refreshPermissionStates()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        refreshPermissionStates()
 
         setContent {
             JPNKNVoxTheme {
@@ -62,11 +68,21 @@ class MainActivity : ComponentActivity() {
                     viewModel = vm,
                     onRequestNotificationPermission = { requestNotificationPermission() },
                     onRequestOverlayPermission = { requestOverlayPermission() },
-                    hasNotificationPermission = { checkNotificationPermission() },
-                    hasOverlayPermission = { checkOverlayPermission() }
+                    hasNotificationPermission = hasNotificationPermission,
+                    hasOverlayPermission = hasOverlayPermission
                 )
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshPermissionStates()
+    }
+
+    private fun refreshPermissionStates() {
+        hasNotificationPermission = checkNotificationPermission()
+        hasOverlayPermission = checkOverlayPermission()
     }
 
     private fun requestNotificationPermission() {
@@ -108,8 +124,8 @@ fun JpnknVoxApp(
     viewModel: MainViewModel,
     onRequestNotificationPermission: () -> Unit,
     onRequestOverlayPermission: () -> Unit,
-    hasNotificationPermission: () -> Boolean,
-    hasOverlayPermission: () -> Boolean
+    hasNotificationPermission: Boolean,
+    hasOverlayPermission: Boolean
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -207,18 +223,28 @@ fun JpnknVoxApp(
                 val isOverlayEnabled by viewModel.isOverlayEnabled.collectAsState()
                 val maxMessageLength by viewModel.maxMessageLength.collectAsState()
                 val overlayAlpha by viewModel.overlayAlpha.collectAsState()
+                val speechRate by viewModel.speechRate.collectAsState()
+                val speechVolume by viewModel.speechVolume.collectAsState()
+                val autoStartOnLaunch by viewModel.autoStartOnLaunch.collectAsState()
                 SettingsScreen(
                     boardId = boardId,
                     onBoardIdChange = { viewModel.updateBoardId(it) },
                     isServiceRunning = isServiceRunning,
-                    hasNotificationPermission = hasNotificationPermission(),
-                    hasOverlayPermission = hasOverlayPermission(),
+                    hasNotificationPermission = hasNotificationPermission,
+                    hasOverlayPermission = hasOverlayPermission,
                     isOverlayEnabled = isOverlayEnabled,
                     onOverlayEnabledChange = { viewModel.updateOverlayEnabled(it) },
                     overlayAlpha = overlayAlpha,
                     onOverlayAlphaChange = { viewModel.updateOverlayAlpha(it) },
                     maxMessageLength = maxMessageLength,
                     onMaxMessageLengthChange = { viewModel.updateMaxMessageLength(it) },
+                    speechRate = speechRate,
+                    onSpeechRateChange = { viewModel.updateSpeechRate(it) },
+                    speechVolume = speechVolume,
+                    onSpeechVolumeChange = { viewModel.updateSpeechVolume(it) },
+                    autoStartOnLaunch = autoStartOnLaunch,
+                    onAutoStartOnLaunchChange = { viewModel.updateAutoStartOnLaunch(it) },
+                    onTestSpeech = { viewModel.playTestSpeech() },
                     onRequestNotificationPermission = onRequestNotificationPermission,
                     onRequestOverlayPermission = onRequestOverlayPermission
                 )

@@ -75,6 +75,7 @@ IRL配信（屋外配信）での手放し運用を想定。
 | `CLAUDE.md` | 毎回必ず守るルールだけ（目安100行以内） |
 | `docs/spec/` | 仕様・設計書（検証済みのもの） |
 | `docs/investigations/` | 未検証の調査結果。事実と仮説を明記して分ける |
+| `docs/references/` | UI モックアップなどの参照資料 |
 | `docs/roadmap.md` | タスクの進捗状態 |
 | `.claude/rules/` | Claudeへの追加指示 |
 
@@ -90,4 +91,5 @@ IRL配信（屋外配信）での手放し運用を想定。
 - `docs/spec/DESIGN-jpnkn-vox.md` — 設計書（ディレクトリ構成・クラス図・状態遷移図）
 - `docs/spec/jpnkn-api-spec.md` — MQTT APIスペック
 - `docs/spec/schema-jpnkn.json` — MQTT ペイロードの JSON スキーマ
+- `docs/references/jpnkn-vox-settings.html` — 設定画面のモックアップ
 - `README.md` — ユーザー向けインストール・ビルド手順（日本語）

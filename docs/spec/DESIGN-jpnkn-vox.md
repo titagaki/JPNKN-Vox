@@ -1,8 +1,8 @@
 # 詳細設計書：JPNKN Vox for Android
 
-**バージョン**: 1.3
+**バージョン**: 1.4
 **作成日**: 2026-02-28
-**最終更新**: 2026-03-20
+**最終更新**: 2026-08-12
 **対応 SRS**: `docs/spec/SRS-jpnkn-vox.md`
 
 ---
@@ -96,8 +96,14 @@ UI スイッチ OFF
   ├─ MainViewModel.updateMaxMessageLength(length)
   │    └─ ServiceController.setMaxMessageLength(length)
   │         └─ JpnknVoxService.instance?.applyMaxMessageLength(length)
-  └─ MainViewModel.updateOverlayAlpha(alpha)
-       └─ ServiceController.setOverlayAlpha(alpha)
+  ├─ MainViewModel.updateOverlayAlpha(alpha)
+  │    └─ ServiceController.setOverlayAlpha(alpha)
+  ├─ MainViewModel.updateSpeechRate(rate)
+  │    └─ ServiceController.setSpeechRate(rate)
+  │         └─ TtsManager.setSpeechRate(rate)
+  └─ MainViewModel.updateSpeechVolume(volume)
+       └─ ServiceController.setSpeechVolume(volume)
+            └─ TtsManager.setVolume(volume)
             └─ JpnknVoxService.instance?.applyOverlayAlpha(alpha)
                  └─ OverlayManager.updateAlpha(alpha)
 ```
@@ -109,8 +115,8 @@ UI スイッチ OFF
 ### 2.1 エントリーポイント層（ルートパッケージ）
 
 #### `MainActivity`
-- **責務**: 権限リクエスト・Compose UI のセットアップのみ
-- **保持するもの**: `requestNotificationPermissionLauncher`
+- **責務**: 権限リクエスト・権限状態の保持・Compose UI のセットアップのみ
+- **保持するもの**: `requestNotificationPermissionLauncher`、`hasNotificationPermission` / `hasOverlayPermission`（`mutableStateOf`。`onCreate` と `onResume`、権限リクエスト結果で更新し、権限画面から戻った直後の表示に反映する）
 - **持たないもの**: BroadcastReceiver、ViewModel への直接参照（Compose 内で取得）
 - **権限処理**:
   - `POST_NOTIFICATIONS`（Android 13+）: `ActivityResultContracts.RequestPermission` で取得
@@ -128,8 +134,12 @@ UI スイッチ OFF
   | `isOverlayEnabled` | `MutableState<Boolean>` | オーバーレイ表示の有効状態 |
   | `maxMessageLength` | `MutableState<Int>` | 読み上げ最大文字数 |
   | `overlayAlpha` | `MutableState<Int>` | オーバーレイ背景の濃さ（0〜100 %） |
+  | `speechRate` | `MutableState<Int>` | 話す速度（100 で等倍の百分率） |
+  | `speechVolume` | `MutableState<Int>` | 読み上げ音量（0〜100 %） |
+  | `autoStartOnLaunch` | `MutableState<Boolean>` | アプリ起動時の自動開始 |
 
-- **初期化**: `init` ブロックで `SettingsRepository` の各 Flow を `first()` で取得し状態に反映
+- **初期化**: `init` ブロックで `SettingsRepository` の各 Flow を `first()` で取得し状態に反映したのち、`autoStartIfNeeded()` を呼ぶ
+- **自動開始（`autoStartIfNeeded()`）**: `autoStartOnLaunch` が `true` で、サービスが未稼働かつ板 ID が空でない場合のみ `startService()` を呼ぶ。板 ID 未設定時は `MessageManager` にその旨を記録してスキップする
 - **委譲先**: `ServiceController`（起動・停止・即時反映）、`SettingsRepository`（各設定の永続化）
 - **メソッド**:
 
@@ -141,9 +151,13 @@ UI スイッチ OFF
   | `updateOverlayEnabled(enabled)` | 状態更新 + `SettingsRepository.saveOverlayEnabled` + `ServiceController.setOverlayEnabled` |
   | `updateMaxMessageLength(length)` | 状態更新 + `SettingsRepository.saveMaxMessageLength` + `ServiceController.setMaxMessageLength` |
   | `updateOverlayAlpha(alpha)` | 状態更新 + `SettingsRepository.saveOverlayAlpha` + `ServiceController.setOverlayAlpha` |
+  | `updateSpeechRate(rate)` | 状態更新 + `SettingsRepository.saveSpeechRate` + `ServiceController.setSpeechRate` |
+  | `updateSpeechVolume(volume)` | 状態更新 + `SettingsRepository.saveSpeechVolume` + `ServiceController.setSpeechVolume` |
+  | `updateAutoStartOnLaunch(enabled)` | 状態更新 + `SettingsRepository.saveAutoStartOnLaunch`（サービスへの反映は不要） |
+  | `playTestSpeech()` | テスト再生。サービス停止中でも鳴らせるよう、ViewModel が専用の `TtsManager`（`previewTtsManager`）を遅延生成して `AppConfig.Tts.TEST_TEXT` を読み上げる。`onCleared()` で `shutdown()` |
 
 #### `ServiceController`
-- **責務**: `JpnknVoxService` の起動・停止・即時設定反映を `Application` コンテキスト経由で実行
+- **責務**: `JpnknVoxService` の起動・停止・即時設定反映を `applicationContext` 経由で実行（`Context` を受け取り、`MainViewModel` と `BootReceiver` の双方から利用する）
 - **メソッド**:
 
   | メソッド | 説明 |
@@ -153,6 +167,8 @@ UI スイッチ OFF
   | `setOverlayEnabled(enabled: Boolean)` | `JpnknVoxService.instance?.applyOverlayEnabled(enabled)` を呼び出す |
   | `setMaxMessageLength(length: Int)` | `JpnknVoxService.instance?.applyMaxMessageLength(length)` を呼び出す |
   | `setOverlayAlpha(alpha: Int)` | `JpnknVoxService.instance?.applyOverlayAlpha(alpha)` を呼び出す |
+  | `setSpeechRate(rate: Int)` | `EXTRA_SPEECH_RATE` を付けて `startService`（`TtsManager.setSpeechRate` に反映） |
+  | `setSpeechVolume(volume: Int)` | `EXTRA_SPEECH_VOLUME` を付けて `startService`（`TtsManager.setVolume` に反映） |
 
 ---
 
@@ -160,7 +176,9 @@ UI スイッチ OFF
 
 #### `JpnknVoxService`
 - **継承**: `Service`
-- **種別**: Foreground Service（`START_STICKY`）
+- **種別**: Foreground Service（`START_NOT_STICKY`）
+  - `START_NOT_STICKY` を返すのは、プロセスが落ちたときに OS がサービスを作り直すと Intent が `null` になり板 ID を失う（空トピック `bbs/` に接続してしまう）ため。開始・停止は明示的な操作に限る
+  - `onTaskRemoved()`: タスク一覧からアプリがスワイプで終了されたら `stopSelf()` でサービスも停止する
 - **通知**: `NotificationChannel(IMPORTANCE_LOW)` + `startForeground`
   - Android 14+: `FOREGROUND_SERVICE_TYPE_SPECIAL_USE`
   - 通知タップで `MainActivity` を `FLAG_ACTIVITY_SINGLE_TOP` で起動する `PendingIntent` を設定
@@ -171,6 +189,9 @@ UI スイッチ OFF
   | `EXTRA_BOARD_ID` | Intent に渡す板 ID のキー |
   | `EXTRA_MAX_MESSAGE_LENGTH` | Intent に渡す最大文字数のキー |
   | `EXTRA_OVERLAY_ALPHA` | Intent に渡すオーバーレイ濃さのキー |
+  | `EXTRA_OVERLAY_ENABLED` | Intent に渡すオーバーレイ表示 ON/OFF のキー |
+  | `EXTRA_SPEECH_RATE` | Intent に渡す話す速度のキー |
+  | `EXTRA_SPEECH_VOLUME` | Intent に渡す読み上げ音量のキー |
   | `instance: JpnknVoxService?` | 稼働中インスタンス（設定の即時反映用、`private set`） |
 
 - **フィールド**:
@@ -180,6 +201,8 @@ UI スイッチ OFF
   | `boardId` | `String` | `""` （空文字、`onStartCommand` で Intent から設定される） |
   | `maxMessageLength` | `Int` | `100` |
   | `overlayAlpha` | `Int` | `80` （0〜100 %） |
+  | `speechRate` | `Int` | `120` （100 で等倍の百分率） |
+  | `speechVolume` | `Int` | `80` （0〜100 %） |
 
 - **ライフサイクルと処理**:
 
@@ -187,14 +210,18 @@ UI スイッチ OFF
   onCreate()
     ├─ instance = this
     ├─ NotificationChannel 作成
+    ├─ SettingsRepository から overlayAlpha / speechRate / speechVolume を読み込み（runBlocking）
     ├─ OverlayManager.create(overlayAlpha)
-    ├─ TtsManager(onInitialized = ::onTtsInitialized, onError)
+    ├─ TtsManager(speechRate, speechVolume, onInitialized = ::onTtsInitialized, onError)
     └─ MqttManager(各コールバック).initialize()
 
   onStartCommand(intent)
     ├─ EXTRA_BOARD_ID を boardId にセット
     ├─ EXTRA_MAX_MESSAGE_LENGTH を maxMessageLength にセット
     ├─ EXTRA_OVERLAY_ALPHA を overlayAlpha にセット
+    ├─ EXTRA_SPEECH_RATE を speechRate にセットし TtsManager.setSpeechRate()
+    ├─ EXTRA_SPEECH_VOLUME を speechVolume にセットし TtsManager.setVolume()
+    ├─ EXTRA_OVERLAY_ENABLED でオーバーレイ表示を切り替え
     └─ startForeground(通知)
 
   onDestroy()
@@ -282,11 +309,14 @@ UI スイッチ OFF
   |---|---|---|
   | `board_id` | `stringPreferencesKey` | `""` （空文字） |
   | `overlay_enabled` | `booleanPreferencesKey` | `true` |
-  | `max_message_length` | `intPreferencesKey` | `100` |
-  | `overlay_alpha` | `intPreferencesKey` | `80` |
+  | `max_message_length` | `intPreferencesKey` | `100`（`AppConfig.Tts.DEFAULT_MAX_MESSAGE_LENGTH`） |
+  | `overlay_alpha` | `intPreferencesKey` | `80`（`AppConfig.Overlay.DEFAULT_ALPHA`） |
+  | `speech_rate` | `intPreferencesKey` | `120`（`AppConfig.Tts.DEFAULT_SPEECH_RATE`） |
+  | `speech_volume` | `intPreferencesKey` | `80`（`AppConfig.Tts.DEFAULT_VOLUME`） |
+  | `auto_start_on_launch` | `booleanPreferencesKey` | `false` |
 
-- **Flow プロパティ**: `boardIdFlow`・`overlayEnabledFlow`・`maxMessageLengthFlow`・`overlayAlphaFlow`
-- **保存メソッド**: `saveBoardId()`・`saveOverlayEnabled()`・`saveMaxMessageLength()`・`saveOverlayAlpha()`（各 `suspend fun`）
+- **Flow プロパティ**: `boardIdFlow`・`overlayEnabledFlow`・`maxMessageLengthFlow`・`overlayAlphaFlow`・`speechRateFlow`・`speechVolumeFlow`・`autoStartOnLaunchFlow`
+- **保存メソッド**: `saveBoardId()`・`saveOverlayEnabled()`・`saveMaxMessageLength()`・`saveOverlayAlpha()`・`saveSpeechRate()`・`saveSpeechVolume()`・`saveAutoStartOnLaunch()`（各 `suspend fun`）
 
 ---
 
@@ -343,8 +373,12 @@ UI スイッチ OFF
                    └─ isSpeaking = false
                         └─ Handler.postDelayed(SPEECH_INTERVAL_MS) → processQueue()
   ```
-- **初期化完了後処理**: `onInit(SUCCESS)` 後、キューに溜まっているメッセージがあれば即座に `processQueue()` を呼び出す
-- **その他メソッド**: `stop()`（読み上げ中断）、`clearQueue()`（キュークリア）、`shutdown()`（`handler.removeCallbacksAndMessages` + stop + clearQueue + TTS 解放）
+- **初期化完了後処理**: `onInit(SUCCESS)` 後、`setSpeechRate` を適用し、キューに溜まっているメッセージがあれば即座に `processQueue()` を呼び出す
+- **話す速度・音量**:
+  - コンストラクタ引数 `speechRate`（100 で等倍の百分率）・`volume`（0〜100 %）で初期値を受け取る
+  - 速度は `TextToSpeech.setSpeechRate(rate / 100f)`、音量は発話ごとに `Bundle(KEY_PARAM_VOLUME = volume / 100f)` で適用する（音量は次の発話から反映）
+  - `setSpeechRate(rate)` / `setVolume(volume)` で稼働中に変更できる
+- **その他メソッド**: `speakNow(text)`（キューを無視して即時発話。テスト再生用）、`stop()`（読み上げ中断）、`clearQueue()`（キュークリア）、`shutdown()`（stop + clearQueue + TTS 解放）
 
 #### `OverlayManager`（`overlay/`）
 - **権限**: `Settings.canDrawOverlays(context)`
@@ -420,14 +454,26 @@ Scaffold
   | `onOverlayAlphaChange` | `(Int) -> Unit` | オーバーレイ濃さ変更コールバック |
   | `maxMessageLength` | `Int` | 読み上げ最大文字数 |
   | `onMaxMessageLengthChange` | `(Int) -> Unit` | 最大文字数変更コールバック |
+  | `speechRate` | `Int` | 話す速度（100 で等倍の百分率） |
+  | `onSpeechRateChange` | `(Int) -> Unit` | 話す速度変更コールバック |
+  | `speechVolume` | `Int` | 読み上げ音量（0〜100 %） |
+  | `onSpeechVolumeChange` | `(Int) -> Unit` | 音量変更コールバック |
+  | `autoStartOnLaunch` | `Boolean` | アプリ起動時の自動開始 |
+  | `onAutoStartOnLaunchChange` | `(Boolean) -> Unit` | 自動開始 ON/OFF コールバック |
+  | `onTestSpeech` | `() -> Unit` | テスト再生 |
   | `onRequestNotificationPermission` | `() -> Unit` | 通知権限リクエスト |
   | `onRequestOverlayPermission` | `() -> Unit` | オーバーレイ権限リクエスト |
 
-- **カード構成**:
-  1. **`BoardIdSettingCard`**: 板 ID 入力（英数字・アンダースコアのみ許可）、サービス稼働中は無効、保存ボタン付き
-  2. **`MessageLengthSettingCard`**: 読み上げ最大文字数入力（数字のみ）、保存ボタン付き
-  3. **`OverlaySettingCard`**: オーバーレイ表示 ON/OFF スイッチ + 背景の濃さスライダー（0〜100 %、オーバーレイ権限がない場合は両方無効化し警告表示、スライダーはオーバーレイ OFF 時も無効）
-  4. **`PermissionStatusCard`**: 通知権限・オーバーレイ権限それぞれの状態アイコン + 取得ボタン
+- **レイアウト**: `docs/references/jpnkn-vox-settings.html` のモックアップに準拠。カードは使わず、セクション見出し（`HorizontalDivider` + `labelMedium` / primary 色）と行リストで構成する
+- **構成**:
+  1. **権限バナー（`PermissionBanner`）**: 未許可のオーバーレイ権限・通知権限それぞれについて `errorContainer` 色のバナーを表示。タップで権限リクエストへ進む。許可済みの権限はバナーごと消える
+  2. **接続**: 板 ID 行（副題にトピック `bbs/{id}` をモノスペース表示、右端に現在値）。タップで編集ダイアログを開く。サービス稼働中は行を無効化し副題を「サービス稼働中は変更できません」に差し替える
+  3. **読み上げ**: 話す速度スライダー（50〜200 %、`1.2x` 形式で表示）／音量スライダー（0〜100 %）／最大文字数行（ダイアログで編集）／テスト再生ボタン（`OutlinedButton`）
+  4. **表示**: オーバーレイ表示スイッチ（オーバーレイ権限がない場合は無効）／背景の濃さスライダー（オーバーレイ権限がないか OFF の場合は無効）
+  5. **動作**: 起動時に自動で開始スイッチ（アプリを開いたときにサービスを自動開始する。端末の再起動時ではない）
+- **共通部品**: `SettingRow`（タップで編集）・`SwitchSettingRow`・`SliderSettingRow`・`EditValueDialog`（板 ID と最大文字数で共用。`sanitize` で入力文字を制限し、`isValid` で保存ボタンを制御）
+- **スライダーの保存タイミング**: ドラッグ中は内部状態のみ更新し、指を離した時点（`onValueChangeFinished`）で永続化とサービス反映を行う
+- **スライダーの刻み**: トラック上に目盛りが表示されるのを避けるため、いずれのスライダーも `steps` は設定せず連続値で扱う
 
 #### `Screen`（ナビゲーション定義）
 ```kotlin
@@ -455,7 +501,13 @@ sealed class Screen(route, title, icon)
 | `Notification` | `CHANNEL_ID` | `jpnkn_vox_channel` |
 | `Notification` | `CHANNEL_NAME` | `JPNKN Vox サービス` |
 | `Notification` | `ID` | `1` |
+| `Tts` | `DEFAULT_SPEECH_RATE` | `120`（%） |
+| `Tts` | `MIN_SPEECH_RATE` / `MAX_SPEECH_RATE` | `50` / `200`（%） |
+| `Tts` | `DEFAULT_VOLUME` | `80`（%） |
+| `Tts` | `DEFAULT_MAX_MESSAGE_LENGTH` | `100` |
+| `Tts` | `TEST_TEXT` | `じゃぱんくん-Vox のテスト再生です` |
 | `Overlay` | `MAX_MESSAGE_LENGTH` | `30` |
+| `Overlay` | `DEFAULT_ALPHA` | `80`（%） |
 | `Overlay` | `INITIAL_Y_POSITION` | `100` |
 
 ---
@@ -477,7 +529,7 @@ SRS に記載があるが現時点で未実装の機能。今後の課題とし�
 
 | SRS 要件 | 状態 | 備考 |
 |---|---|---|
-| TTS 速度・ピッチ・音量の調整 | 未実装 | `SettingsScreen` に項目追加が必要 |
+| TTS 速度・ピッチ・音量の調整 | 部分実装 | 速度（50〜200 %）・音量（0〜100 %）は `SettingsScreen` から設定可能。ピッチは未実装 |
 | NG ワードフィルタリング | 未実装 | `TtsManager.enqueue()` にフィルタ処理を追加 |
 | URL・記号スキップ | 未実装 | 同上 |
 | 読み上げキューの自動スキップ（大量連投時） | 部分実装 | `TtsManager.clearQueue()` は実装済み。キュー上限超過時の自動クリアロジックは未実装 |

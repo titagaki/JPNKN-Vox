@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JPNKN Vox 設定画面モックアップ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --pri:#0B57D0;
+  --pri-cont:#DDE3F8;
+  --on-pri-cont:#0A2E70;
+  --surf:#FAF9FD;
+  --on-surf:#1B1B1F;
+  --on-surf-var:#5A5C63;
+  --outline:#C6C6CE;
+  --line:#E4E3EA;
+  --warn:#6E4F00;
+  --warn-cont:#FFE08C;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:32px 16px 48px;background:#4A4C52;
+  font-family:"Noto Sans JP",system-ui,sans-serif;
+  display:flex;flex-direction:column;align-items:center;gap:18px;
+}
+.caption{font-size:13px;color:#C3C3CB}
+.phone{
+  width:390px;background:var(--surf);color:var(--on-surf);
+  border-radius:32px;overflow:hidden;
+  box-shadow:0 0 0 10px #26282D,0 18px 46px rgba(0,0,0,.45);
+}
+.statusbar{
+  height:30px;background:var(--pri-cont);color:var(--on-pri-cont);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;font-size:12px;font-weight:500;
+}
+.appbar{
+  background:var(--pri-cont);padding:12px 16px 16px;
+  display:flex;align-items:center;gap:14px;
+}
+.appbar .ms{font-size:22px;color:var(--on-pri-cont);cursor:pointer}
+.appbar .title{font-size:20px;font-weight:500;color:var(--on-pri-cont)}
+.banner{
+  display:flex;align-items:center;gap:12px;padding:14px 16px;
+  background:var(--warn-cont);color:var(--warn);cursor:pointer;
+}
+.banner .ms{font-size:22px}
+.banner .t{font-size:15px}
+.banner .s{font-size:12px;margin-top:2px}
+.sechead{padding:18px 16px 6px;font-size:12px;font-weight:500;color:var(--pri)}
+.sechead.tl{border-top:1px solid var(--line);margin-top:8px}
+.row{
+  display:flex;align-items:center;gap:14px;padding:12px 16px;
+  width:100%;border:none;background:none;font:inherit;color:inherit;
+  text-align:left;cursor:pointer;
+}
+.row:active{background:#EFEEF4}
+.row .grow{flex:1;min-width:0}
+.row .t{font-size:16px}
+.row .s{font-size:12px;color:var(--on-surf-var);margin-top:3px;line-height:1.5}
+.row .s.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.row .v{font-size:15px;color:var(--on-surf-var);white-space:nowrap}
+.slider{padding:12px 16px 14px}
+.slider .top{display:flex;justify-content:space-between;align-items:baseline}
+.slider .top .l{font-size:16px}
+.slider .top .v{font-size:15px;color:var(--on-surf-var)}
+input[type=range]{
+  width:100%;height:22px;margin:8px 0 0;-webkit-appearance:none;background:transparent;
+}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:var(--pri-cont)}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:20px;height:20px;border-radius:50%;
+  background:var(--pri);margin-top:-8px;border:none;
+}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:var(--pri-cont)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border:none;border-radius:50%;background:var(--pri)}
+.switch{
+  width:52px;height:32px;border-radius:16px;background:#8E9099;position:relative;
+  border:none;padding:0;flex:none;cursor:pointer;transition:background .18s;
+}
+.switch i{position:absolute;top:4px;left:4px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .18s}
+.switch.on{background:var(--pri)}
+.switch.on i{left:24px}
+.testbtn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:calc(100% - 32px);margin:6px 16px 18px;padding:12px;
+  border-radius:100px;border:1px solid var(--outline);background:none;
+  font:inherit;font-size:15px;font-weight:500;color:var(--pri);cursor:pointer;
+}
+.testbtn:active{background:var(--pri-cont)}
+.pad{height:10px}
+.ms{
+  font-family:"Material Symbols Outlined";font-weight:400;font-style:normal;
+  line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;
+  white-space:nowrap;font-variation-settings:'opsz' 24;
+}
+@media (max-width:430px){
+  body{padding:0}
+  .phone{width:100%;border-radius:0;box-shadow:none}
+  .caption{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="caption">JPNKN Vox 設定画面</div>
+
+<div class="phone">
+  <div class="statusbar"><span>10:53</span><span class="ms" style="font-size:15px">signal_cellular_alt&nbsp;battery_5_bar</span></div>
+
+  <div class="appbar">
+    <span class="ms">arrow_back</span>
+    <span class="title">設定</span>
+  </div>
+
+  <div class="banner" onclick="alert('システムのオーバーレイ権限設定を開きます')">
+    <span class="ms">warning</span>
+    <div>
+      <div class="t">オーバーレイ権限が未許可</div>
+      <div class="s">タップして許可する</div>
+    </div>
+  </div>
+
+  <div class="sechead">接続</div>
+  <button class="row">
+    <div class="grow">
+      <div class="t">板 ID</div>
+      <div class="s mono">bbs/inohead</div>
+    </div>
+    <span class="v">inohead</span>
+  </button>
+
+  <div class="sechead tl">読み上げ</div>
+  <div class="slider">
+    <div class="top"><span class="l">話す速度</span><span class="v" id="v-rate">1.2x</span></div>
+    <input type="range" min="50" max="200" step="5" value="120"
+      oninput="document.getElementById('v-rate').textContent=(this.value/100).toFixed(1)+'x'">
+  </div>
+  <div class="slider">
+    <div class="top"><span class="l">音量</span><span class="v" id="v-vol">80%</span></div>
+    <input type="range" min="0" max="100" step="1" value="80"
+      oninput="document.getElementById('v-vol').textContent=this.value+'%'">
+  </div>
+  <button class="row">
+    <div class="grow">
+      <div class="t">最大文字数</div>
+      <div class="s">超えた分は「以下略」として省略します</div>
+    </div>
+    <span class="v">100</span>
+  </button>
+  <button class="testbtn"><span class="ms" style="font-size:19px">play_arrow</span>テスト再生</button>
+
+  <div class="sechead tl">表示</div>
+  <div class="row">
+    <div class="grow"><div class="t">オーバーレイ表示</div></div>
+    <button class="switch on" onclick="this.classList.toggle('on')" aria-label="オーバーレイ表示"><i></i></button>
+  </div>
+  <div class="slider">
+    <div class="top"><span class="l">背景の濃さ</span><span class="v" id="v-op">25%</span></div>
+    <input type="range" min="0" max="100" step="1" value="25"
+      oninput="document.getElementById('v-op').textContent=this.value+'%'">
+  </div>
+
+  <div class="sechead tl">動作</div>
+  <div class="row">
+    <div class="grow"><div class="t">起動時に自動で開始</div></div>
+    <button class="switch" onclick="this.classList.toggle('on')" aria-label="起動時に自動で開始"><i></i></button>
+  </div>
+  <div class="pad"></div>
+</div>
+
+</body>
+</html>

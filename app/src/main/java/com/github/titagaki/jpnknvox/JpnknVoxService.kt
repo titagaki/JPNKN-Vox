@@ -44,6 +44,8 @@ class JpnknVoxService : Service() {
         const val EXTRA_MAX_MESSAGE_LENGTH = "extra_max_message_length"
         const val EXTRA_OVERLAY_ALPHA = "extra_overlay_alpha"
         const val EXTRA_OVERLAY_ENABLED = "extra_overlay_enabled"
+        const val EXTRA_SPEECH_RATE = "extra_speech_rate"
+        const val EXTRA_SPEECH_VOLUME = "extra_speech_volume"
 
         /** サービスが現在稼働中かどうかを示すフラグ */
         var isRunning: Boolean = false
@@ -61,10 +63,16 @@ class JpnknVoxService : Service() {
     private var boardId: String = ""
 
     // メッセージ最大文字数
-    private var maxMessageLength: Int = 100
+    private var maxMessageLength: Int = AppConfig.Tts.DEFAULT_MAX_MESSAGE_LENGTH
 
     // オーバーレイ背景の濃さ（0〜100 %）
-    private var overlayAlpha: Int = 80
+    private var overlayAlpha: Int = AppConfig.Overlay.DEFAULT_ALPHA
+
+    // 話す速度（100 で等倍の百分率）
+    private var speechRate: Int = AppConfig.Tts.DEFAULT_SPEECH_RATE
+
+    // 読み上げ音量（0〜100 %）
+    private var speechVolume: Int = AppConfig.Tts.DEFAULT_VOLUME
 
     override fun onCreate() {
         super.onCreate()
@@ -76,8 +84,14 @@ class JpnknVoxService : Service() {
         // 通知チャンネルを作成
         createNotificationChannel()
 
-        // DataStore から保存済みの alpha を読み込んでオーバーレイを作成
-        overlayAlpha = runBlocking { SettingsRepository(this@JpnknVoxService).overlayAlphaFlow.first() }
+        // DataStore から保存済みの設定を読み込む
+        val settingsRepository = SettingsRepository(this)
+        runBlocking {
+            overlayAlpha = settingsRepository.overlayAlphaFlow.first()
+            speechRate = settingsRepository.speechRateFlow.first()
+            speechVolume = settingsRepository.speechVolumeFlow.first()
+        }
+
         overlayManager = OverlayManager(this).also {
             if (it.create(overlayAlpha)) {
                 MessageManager.addSystemLog("オーバーレイを作成しました")
@@ -88,6 +102,8 @@ class JpnknVoxService : Service() {
         ttsManager = TtsManager(
             context = this,
             coroutineScope = serviceScope,
+            speechRate = speechRate,
+            volume = speechVolume,
             onInitialized = { onTtsInitialized() },
             onError = { message ->
                 MessageManager.addSystemLog("TTS エラー: $message")
@@ -119,15 +135,30 @@ class JpnknVoxService : Service() {
 
         // 最大文字数を Intent から取得（起動時のみ有効）
         intent?.takeIf { it.hasExtra(EXTRA_MAX_MESSAGE_LENGTH) }?.let {
-            maxMessageLength = it.getIntExtra(EXTRA_MAX_MESSAGE_LENGTH, 100)
+            maxMessageLength =
+                it.getIntExtra(EXTRA_MAX_MESSAGE_LENGTH, AppConfig.Tts.DEFAULT_MAX_MESSAGE_LENGTH)
             Log.d(TAG, "Max message length set to: $maxMessageLength")
         }
 
         // オーバーレイ濃さを Intent から取得し、生成済みオーバーレイに反映
         intent?.takeIf { it.hasExtra(EXTRA_OVERLAY_ALPHA) }?.let {
-            overlayAlpha = it.getIntExtra(EXTRA_OVERLAY_ALPHA, 80)
+            overlayAlpha = it.getIntExtra(EXTRA_OVERLAY_ALPHA, AppConfig.Overlay.DEFAULT_ALPHA)
             overlayManager?.updateAlpha(overlayAlpha)
             Log.d(TAG, "Overlay alpha set to: $overlayAlpha")
+        }
+
+        // 話す速度を Intent から取得し、TTS に反映
+        intent?.takeIf { it.hasExtra(EXTRA_SPEECH_RATE) }?.let {
+            speechRate = it.getIntExtra(EXTRA_SPEECH_RATE, AppConfig.Tts.DEFAULT_SPEECH_RATE)
+            ttsManager?.setSpeechRate(speechRate)
+            Log.d(TAG, "Speech rate set to: $speechRate")
+        }
+
+        // 読み上げ音量を Intent から取得し、TTS に反映
+        intent?.takeIf { it.hasExtra(EXTRA_SPEECH_VOLUME) }?.let {
+            speechVolume = it.getIntExtra(EXTRA_SPEECH_VOLUME, AppConfig.Tts.DEFAULT_VOLUME)
+            ttsManager?.setVolume(speechVolume)
+            Log.d(TAG, "Speech volume set to: $speechVolume")
         }
 
         // オーバーレイ有効/無効
@@ -137,10 +168,23 @@ class JpnknVoxService : Service() {
         }
 
         startForegroundServiceWithNotification()
-        return START_STICKY
+
+        // START_NOT_STICKY: プロセスが落ちても OS に勝手に作り直させない。
+        // 再生成時は Intent が null になり板 ID を失うため、開始・停止は明示的な操作に限る。
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * タスク一覧からアプリがスワイプで終了されたとき、サービスも停止する
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.d(TAG, "Task removed, stopping service")
+        MessageManager.addSystemLog("アプリが終了したためサービスを停止します")
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
+    }
 
     override fun onDestroy() {
         isRunning = false

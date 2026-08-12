@@ -1,9 +1,11 @@
 package com.github.titagaki.jpnknvox.tts
 
 import android.content.Context
+import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import com.github.titagaki.jpnknvox.config.AppConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -17,10 +19,16 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * - TextToSpeech の初期化と解放
  * - 読み上げキューの管理
  * - 読み上げ状態の管理
+ * - 話す速度・音量の適用
+ *
+ * @param speechRate 話す速度（100 で等倍の百分率）
+ * @param volume 音量（0〜100 %）
  */
 class TtsManager(
     context: Context,
     private val coroutineScope: CoroutineScope,
+    speechRate: Int = AppConfig.Tts.DEFAULT_SPEECH_RATE,
+    volume: Int = AppConfig.Tts.DEFAULT_VOLUME,
     private val onInitialized: () -> Unit,
     private val onError: (String) -> Unit
 ) : TextToSpeech.OnInitListener {
@@ -33,6 +41,9 @@ class TtsManager(
     private var tts: TextToSpeech? = TextToSpeech(context, this)
     private var isInitialized = false
     private var isSpeaking = false
+
+    private var speechRate: Int = speechRate
+    private var volume: Int = volume
 
     // 読み上げキュー
     private val speechQueue = ConcurrentLinkedQueue<String>()
@@ -54,6 +65,7 @@ class TtsManager(
             } else {
                 Log.d(TAG, "TTS initialized successfully")
                 isInitialized = true
+                applySpeechRate()
                 setupUtteranceListener()
                 onInitialized()
 
@@ -101,6 +113,58 @@ class TtsManager(
     }
 
     /**
+     * 話す速度を変更する
+     *
+     * @param rate 100 で等倍の百分率
+     */
+    fun setSpeechRate(rate: Int) {
+        speechRate = rate
+        applySpeechRate()
+        Log.d(TAG, "Speech rate set to: $rate%")
+    }
+
+    /**
+     * 音量を変更する。次に読み上げる発話から反映される
+     *
+     * @param volume 0〜100 の整数（%）
+     */
+    fun setVolume(volume: Int) {
+        this.volume = volume
+        Log.d(TAG, "Volume set to: $volume%")
+    }
+
+    private fun applySpeechRate() {
+        if (isInitialized) {
+            tts?.setSpeechRate(speechRate / 100f)
+        }
+    }
+
+    private fun createSpeechParams(): Bundle = Bundle().apply {
+        putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume / 100f)
+    }
+
+    /**
+     * キューを無視して即座に読み上げる（テスト再生用）
+     *
+     * @param text 読み上げるテキスト
+     */
+    fun speakNow(text: String) {
+        if (!isInitialized) {
+            Log.w(TAG, "TTS not initialized yet, cannot speak immediately")
+            return
+        }
+
+        isSpeaking = true
+        tts?.speak(
+            text,
+            TextToSpeech.QUEUE_FLUSH,
+            createSpeechParams(),
+            System.currentTimeMillis().toString()
+        )
+        Log.d(TAG, "Speaking immediately: $text")
+    }
+
+    /**
      * テキストを読み上げキューに追加
      *
      * @param text 読み上げるテキスト
@@ -140,7 +204,12 @@ class TtsManager(
         val text = speechQueue.poll()
         if (text != null) {
             isSpeaking = true
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, System.currentTimeMillis().toString())
+            tts?.speak(
+                text,
+                TextToSpeech.QUEUE_FLUSH,
+                createSpeechParams(),
+                System.currentTimeMillis().toString()
+            )
             Log.d(TAG, "Speaking: $text (Remaining: ${speechQueue.size})")
         } else {
             Log.d(TAG, "Speech queue is empty")
