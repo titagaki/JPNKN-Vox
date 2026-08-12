@@ -29,6 +29,63 @@ object AppConfig {
         }
     }
 
+    // jpnkn 掲示板（MQTT 以外）
+    object Jpnkn {
+        /** 板の URL。板が実在するかの確認に使う */
+        const val BOARD_BASE_URL = "https://bbs.jpnkn.com/"
+    }
+
+    // ツイキャス接続情報
+    //
+    // 公式 API v2 ではなく、認証の要らない内部エンドポイントを使う。
+    // 詳細と選定理由は docs/spec/twicas-comment-spec.md を参照
+    object Twicas {
+        /** 配信中かどうかと動画 ID を取得する */
+        const val STREAM_SERVER_URL = "https://twitcasting.tv/streamserver.php"
+
+        /** コメントサーバ（WebSocket）の URL を取得する */
+        const val EVENT_PUBSUB_URL = "https://twitcasting.tv/eventpubsuburl.php"
+
+        /** 配信開始を待つ間のポーリング間隔 */
+        const val BROADCAST_POLLING_INTERVAL_MS = 5000L
+
+        /** コメントサーバから切断されたあと、取り直すまでの待ち時間 */
+        const val RECONNECT_DELAY_MS = 5000L
+
+        /**
+         * WebSocket の ping 間隔（秒）
+         *
+         * モバイル回線では切断が通知されないまま黙って止まることがあるため、
+         * こちらから ping を打って検出する。
+         */
+        const val PING_INTERVAL_SEC = 30L
+
+        /** 通信のタイムアウト（秒） */
+        const val REQUEST_TIMEOUT_SEC = 15L
+    }
+
+    // コメント取得先の設定
+    object Source {
+        /**
+         * 取得先の識別色として選べる色（ARGB）
+         *
+         * 色相の順（赤→黄→緑→水色→青→紫→桃）に並べる。
+         * 隣り合うものほど色が近いので、離れた色を選べば見分けやすいと分かる。
+         *
+         * 明るい背景の上に 3〜4dp の細い帯として出るため、
+         * 黄と水色は薄くしすぎると背景に溶ける。色名として通じる範囲で沈めてある。
+         */
+        val PALETTE: List<Int> = listOf(
+            0xFFC7411F.toInt(), // 赤
+            0xFFEFB700.toInt(), // 黄
+            0xFF1E7B45.toInt(), // 緑
+            0xFF29B6F6.toInt(), // 水色
+            0xFF0B57D0.toInt(), // 青
+            0xFF8B3FE8.toInt(), // 紫
+            0xFFB0398A.toInt()  // 桃
+        )
+    }
+
     // 通知設定
     object Notification {
         const val CHANNEL_ID = "jpnkn_vox_channel"

@@ -1,7 +1,11 @@
 package com.github.titagaki.jpnknvox
 
+import com.github.titagaki.jpnknvox.data.CommentSource
 import com.github.titagaki.jpnknvox.data.JpnknMessage
 import com.github.titagaki.jpnknvox.data.MessageManager
+import com.github.titagaki.jpnknvox.data.ReceivedComment
+import com.github.titagaki.jpnknvox.data.SourceType
+import com.github.titagaki.jpnknvox.data.toReceivedComment
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -38,7 +42,7 @@ class MessageManagerTest {
     fun `addMessage - メッセージが正しく追加される`() {
         val msg = createTestMessage("1", "テスト太郎", "こんにちは")
 
-        MessageManager.addMessage(msg)
+        MessageManager.addMessage(msg, testSource)
 
         val logs = MessageManager.messageLogs.value
         assertEquals(1, logs.size)
@@ -53,9 +57,9 @@ class MessageManagerTest {
         val msg2 = createTestMessage("2", "次郎", "2番目")
         val msg3 = createTestMessage("3", "三郎", "3番目")
 
-        MessageManager.addMessage(msg1)
-        MessageManager.addMessage(msg2)
-        MessageManager.addMessage(msg3)
+        MessageManager.addMessage(msg1, testSource)
+        MessageManager.addMessage(msg2, testSource)
+        MessageManager.addMessage(msg3, testSource)
 
         val logs = MessageManager.messageLogs.value
         assertEquals(3, logs.size)
@@ -69,7 +73,7 @@ class MessageManagerTest {
         // 501件追加
         for (i in 1..501) {
             val msg = createTestMessage(i.toString(), "名前$i", "本文$i")
-            MessageManager.addMessage(msg)
+            MessageManager.addMessage(msg, testSource)
         }
 
         val logs = MessageManager.messageLogs.value
@@ -84,8 +88,8 @@ class MessageManagerTest {
     fun `addMessage - 各ログのidはユニーク`() {
         val msg = createTestMessage("1", "名前", "本文")
 
-        MessageManager.addMessage(msg)
-        MessageManager.addMessage(msg)
+        MessageManager.addMessage(msg, testSource)
+        MessageManager.addMessage(msg, testSource)
 
         val logs = MessageManager.messageLogs.value
         assertEquals(2, logs.size)
@@ -162,13 +166,20 @@ class MessageManagerTest {
     // ヘルパー
     // ========================================
 
-    private fun createTestMessage(no: String, name: String, message: String): JpnknMessage {
+    private val testSource = CommentSource(
+        uuid = "test-uuid",
+        type = SourceType.JPNKN,
+        sourceId = "test",
+        color = 0xFF0B57D0.toInt()
+    )
+
+    private fun createTestMessage(no: String, name: String, message: String): ReceivedComment {
         return JpnknMessage(
             body = "$name<>sage<>2024/01/01<>$message<>",
             no = no,
             bbsid = "test",
             threadkey = "key"
-        )
+        ).toReceivedComment(testSource.uuid)
     }
 }
 

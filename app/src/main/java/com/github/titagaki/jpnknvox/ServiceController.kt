@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import com.github.titagaki.jpnknvox.config.AppConfig
+import com.github.titagaki.jpnknvox.data.CommentSource
 import com.github.titagaki.jpnknvox.data.MessageManager
 
 /**
@@ -21,20 +22,35 @@ class ServiceController(context: Context) {
     private val appContext: Context = context.applicationContext
 
     fun start(
-        boardId: String,
+        sources: List<CommentSource>,
         maxMessageLength: Int = AppConfig.Tts.DEFAULT_MAX_MESSAGE_LENGTH,
         overlayAlpha: Int = AppConfig.Overlay.DEFAULT_ALPHA,
         overlayTextSize: Int = AppConfig.Overlay.DEFAULT_TEXT_SIZE
     ) {
         val intent = Intent(appContext, JpnknVoxService::class.java).apply {
-            putExtra(JpnknVoxService.EXTRA_BOARD_ID, boardId)
+            putExtra(JpnknVoxService.EXTRA_SOURCES, CommentSource.listToJson(sources))
             putExtra(JpnknVoxService.EXTRA_MAX_MESSAGE_LENGTH, maxMessageLength)
             putExtra(JpnknVoxService.EXTRA_OVERLAY_ALPHA, overlayAlpha)
             putExtra(JpnknVoxService.EXTRA_OVERLAY_TEXT_SIZE, overlayTextSize)
         }
         appContext.startForegroundService(intent)
-        MessageManager.addSystemLog("サービスを開始しました (板: $boardId)")
-        Log.d(TAG, "JpnknVoxService started with board ID: $boardId, max message length: $maxMessageLength, overlay alpha: $overlayAlpha")
+        MessageManager.addSystemLog("サービスを開始しました (取得先 ${sources.size} 件)")
+        Log.d(TAG, "JpnknVoxService started with ${sources.size} source(s), max message length: $maxMessageLength, overlay alpha: $overlayAlpha")
+    }
+
+    /**
+     * コメント取得先の一覧をサービスに即時反映する
+     *
+     * サービス側で稼働中の接続と突き合わせ、差分だけを接続・切断する。
+     * 追加・編集・削除のいずれもこの経路を通る。
+     *
+     * @param sources 取得先の一覧
+     */
+    fun setSources(sources: List<CommentSource>) {
+        val intent = Intent(appContext, JpnknVoxService::class.java)
+            .putExtra(JpnknVoxService.EXTRA_SOURCES, CommentSource.listToJson(sources))
+        appContext.startService(intent)
+        Log.d(TAG, "Sources set to ${sources.size} source(s)")
     }
 
     fun stop() {

@@ -17,6 +17,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.github.titagaki.jpnknvox.R
 import com.github.titagaki.jpnknvox.config.AppConfig
+import com.github.titagaki.jpnknvox.source.SourceStatus
 import kotlin.math.roundToInt
 
 /**
@@ -47,6 +48,20 @@ class OverlayManager(private val context: Context) {
 
     companion object {
         private const val TAG = "OverlayManager"
+
+        /**
+         * 取得先ごとの状態を、オーバーレイに出す状態に変換する
+         *
+         * どれを代表させるかは [SourceStatus.aggregate] が決める。
+         * ここではその結果を表示上の状態に対応付けるだけ。
+         */
+        fun aggregateStatus(statuses: Collection<SourceStatus>): ConnectionStatus =
+            when (SourceStatus.aggregate(statuses)) {
+                null, SourceStatus.ERROR -> ConnectionStatus.NOT_CONNECTED
+                SourceStatus.DISCONNECTED -> ConnectionStatus.DISCONNECTED
+                SourceStatus.WAITING -> ConnectionStatus.WAITING
+                SourceStatus.CONNECTED, SourceStatus.WAITING_BROADCAST -> ConnectionStatus.CONNECTED
+            }
     }
 
     private var windowManager: WindowManager? = null
@@ -121,7 +136,7 @@ class OverlayManager(private val context: Context) {
 
             applyOutlinePaddingOffsets()
 
-            applyStatus(ConnectionStatus.WAITING)
+            applyStatusLine()
 
             // ウィンドウパラメータを設定
             // 幅は画面いっぱい固定。メッセージの長さで横幅が伸び縮みしないようにする
@@ -228,17 +243,33 @@ class OverlayManager(private val context: Context) {
         ).roundToInt()
     }
 
+    /** 直近に表示した接続状態。取得先名だけを差し替えるときに使う */
+    private var currentStatus: ConnectionStatus = ConnectionStatus.WAITING
+
+    /** 1 行目に添える取得先の ID。取得先が 1 つだけのときは null（アプリ名だけ出す） */
+    private var currentSourceId: String? = null
+
     /**
-     * 接続状態をアプリ名の色に反映する（メインスレッドから呼ぶこと）
+     * 1 行目（アプリ名・取得先・接続状態）を組み立てて反映する（メインスレッドから呼ぶこと）
      *
-     * 正常時はアプリ名だけ。対処が要る状態のときは同じ行に理由を足す。
+     * 取得先が複数あるときは、いま読み上げている取得先の ID を添える。
+     * 対処が要る状態のときは、さらに理由を足す。
+     *
+     * 色は 1 行まるごと接続状態の色にする。取得先の識別色で一部だけ塗り分けると、
+     * [OutlinedTextView] の縁取りがその部分だけ効かなくなり読みにくくなるため。
      */
-    private fun applyStatus(status: ConnectionStatus) {
+    private fun applyStatusLine() {
         val appName = context.getString(R.string.app_name)
 
+        val text = buildString {
+            append(appName)
+            currentSourceId?.let { append(" — ").append(it) }
+            if (currentStatus.showLabel) append(" (").append(currentStatus.label).append(")")
+        }
+
         statusTextView?.apply {
-            text = if (status.showLabel) "$appName — ${status.label}" else appName
-            setTextColor(status.color)
+            this.text = text
+            setTextColor(currentStatus.color)
         }
     }
 
@@ -246,8 +277,10 @@ class OverlayManager(private val context: Context) {
      * メッセージ表示を更新
      *
      * @param message メッセージテキスト
+     * @param sourceId 読み上げている取得先の ID。1 行目に添える。
+     *   取得先が 1 つだけで区別が要らない場合は null
      */
-    fun updateMessage(message: String) {
+    fun updateMessage(message: String, sourceId: String? = null) {
         val displayText = if (message.length > AppConfig.Overlay.MAX_MESSAGE_LENGTH) {
             message.substring(0, AppConfig.Overlay.MAX_MESSAGE_LENGTH) + "..."
         } else {
@@ -256,6 +289,10 @@ class OverlayManager(private val context: Context) {
 
         mainHandler.post {
             messageTextView?.text = displayText
+            if (currentSourceId != sourceId) {
+                currentSourceId = sourceId
+                applyStatusLine()
+            }
         }
     }
 
@@ -263,7 +300,10 @@ class OverlayManager(private val context: Context) {
      * 接続状態を表示
      */
     fun showStatus(status: ConnectionStatus) {
-        mainHandler.post { applyStatus(status) }
+        mainHandler.post {
+            currentStatus = status
+            applyStatusLine()
+        }
     }
 
     /**

@@ -5,8 +5,12 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.github.titagaki.jpnknvox.config.AppConfig
+import com.github.titagaki.jpnknvox.data.CommentSource
 import com.github.titagaki.jpnknvox.data.MessageManager
 import com.github.titagaki.jpnknvox.data.SettingsRepository
+import com.github.titagaki.jpnknvox.data.SourceType
+import com.github.titagaki.jpnknvox.source.SourceTestResult
+import com.github.titagaki.jpnknvox.source.SourceTester
 import com.github.titagaki.jpnknvox.tts.TtsManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,12 +33,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val settingsRepository = SettingsRepository(application)
     private val serviceController = ServiceController(application)
+    private val sourceTester = SourceTester()
 
     private val _isServiceRunning = MutableStateFlow(JpnknVoxService.isRunning)
     val isServiceRunning: StateFlow<Boolean> = _isServiceRunning.asStateFlow()
 
-    private val _boardId = MutableStateFlow("")
-    val boardId: StateFlow<String> = _boardId.asStateFlow()
+    private val _sources = MutableStateFlow<List<CommentSource>>(emptyList())
+    val sources: StateFlow<List<CommentSource>> = _sources.asStateFlow()
 
     private val _isOverlayEnabled = MutableStateFlow(true)
     val isOverlayEnabled: StateFlow<Boolean> = _isOverlayEnabled.asStateFlow()
@@ -62,7 +67,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            _boardId.value = settingsRepository.boardIdFlow.first()
+            _sources.value = settingsRepository.commentSourcesFlow.first()
             _isOverlayEnabled.value = settingsRepository.overlayEnabledFlow.first()
             _maxMessageLength.value = settingsRepository.maxMessageLengthFlow.first()
             _overlayAlpha.value = settingsRepository.overlayAlphaFlow.first()
@@ -70,7 +75,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _speechRate.value = settingsRepository.speechRateFlow.first()
             _speechVolume.value = settingsRepository.speechVolumeFlow.first()
             _autoStartOnLaunch.value = settingsRepository.autoStartOnLaunchFlow.first()
-            Log.d(TAG, "Loaded board ID: ${_boardId.value}, overlay enabled: ${_isOverlayEnabled.value}, max message length: ${_maxMessageLength.value}, overlay alpha: ${_overlayAlpha.value}, speech rate: ${_speechRate.value}, speech volume: ${_speechVolume.value}, auto start: ${_autoStartOnLaunch.value}")
+            Log.d(TAG, "Loaded ${_sources.value.size} source(s), overlay enabled: ${_isOverlayEnabled.value}, max message length: ${_maxMessageLength.value}, overlay alpha: ${_overlayAlpha.value}, speech rate: ${_speechRate.value}, speech volume: ${_speechVolume.value}, auto start: ${_autoStartOnLaunch.value}")
 
             autoStartIfNeeded()
         }
@@ -79,7 +84,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * 設定が有効なら、アプリ起動時にサービスを自動開始する
      *
-     * 板 ID 未設定時と、すでに稼働中の場合は何もしない。
+     * 取得先が 1 件も無いときと、すでに稼働中の場合は何もしない。
      */
     private fun autoStartIfNeeded() {
         if (!_autoStartOnLaunch.value) return
@@ -89,9 +94,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        if (_boardId.value.isBlank()) {
-            Log.w(TAG, "Auto start skipped: board ID is not set")
-            MessageManager.addSystemLog("板 ID が未設定のため自動開始をスキップしました")
+        if (_sources.value.isEmpty()) {
+            Log.w(TAG, "Auto start skipped: no comment source is configured")
+            MessageManager.addSystemLog("コメント取得先が未設定のため自動開始をスキップしました")
             return
         }
 
@@ -104,7 +109,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun startService() {
         serviceController.start(
-            boardId = _boardId.value,
+            sources = _sources.value,
             maxMessageLength = _maxMessageLength.value,
             overlayAlpha = _overlayAlpha.value,
             overlayTextSize = _overlayTextSize.value
@@ -121,10 +126,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 板 ID を更新・保存
+     * コメント取得先を追加する
      */
-    fun updateBoardId(newBoardId: String) =
-        updateAndSave(_boardId, newBoardId, settingsRepository::saveBoardId)
+    fun addSource(type: SourceType, sourceId: String, color: Int) {
+        val source = CommentSource.create(type, sourceId, color)
+        saveSources(_sources.value + source)
+    }
+
+    /**
+     * コメント取得先を更新する
+     *
+     * 種別は変更できない（変える場合は削除して追加し直す）。
+     */
+    fun updateSource(uuid: String, sourceId: String, color: Int) {
+        saveSources(
+            _sources.value.map { source ->
+                if (source.uuid == uuid) {
+                    source.copy(sourceId = sourceId, color = color)
+                } else {
+                    source
+                }
+            }
+        )
+    }
+
+    /**
+     * コメント取得先を削除する
+     */
+    fun removeSource(uuid: String) {
+        saveSources(_sources.value.filterNot { it.uuid == uuid })
+    }
+
+    /**
+     * 取得先の一覧を保存し、稼働中ならサービスにも反映する
+     */
+    private fun saveSources(sources: List<CommentSource>) =
+        updateAndSave(_sources, sources, settingsRepository::saveCommentSources) {
+            serviceController.setSources(it)
+        }
+
+    /**
+     * 取得先に接続できるかを確かめる
+     *
+     * @param onResult 結果を受け取る処理
+     */
+    fun testSource(type: SourceType, sourceId: String, onResult: (SourceTestResult) -> Unit) {
+        viewModelScope.launch {
+            onResult(sourceTester.test(type, sourceId))
+        }
+    }
 
     /**
      * オーバーレイ有効状態を更新・保存

@@ -5,26 +5,31 @@ import java.util.UUID
 /**
  * UI 表示用のメッセージログデータクラス
  *
- * JpnknMessage から必要な情報を抽出し、UI に最適化した形で保持する。
+ * 受信したコメントから必要な情報を抽出し、UI に最適化した形で保持する。
+ *
+ * @param sourceColor どの取得先から来たかを示す識別色（ARGB）
  */
 data class MessageLog(
     val id: String,
     val no: String,
     val name: String,
     val message: String,
-    val timestamp: Long
+    val timestamp: Long,
+    val sourceColor: Int
 )
 
 /**
- * JpnknMessage から MessageLog を生成する拡張関数
+ * 受信したコメントから MessageLog を生成する拡張関数
+ *
+ * @param source 受信元の取得先
  */
-fun JpnknMessage.toLog(): MessageLog {
+fun ReceivedComment.toLog(source: CommentSource): MessageLog {
     return MessageLog(
         id = UUID.randomUUID().toString(),
         no = no,
-        name = extractName(),
-        message = extractMessage(),
-        timestamp = System.currentTimeMillis()
+        name = name,
+        message = message,
+        timestamp = System.currentTimeMillis(),
+        sourceColor = source.color
     )
 }
-

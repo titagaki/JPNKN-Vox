@@ -8,6 +8,7 @@ import com.hivemq.client.mqtt.datatypes.MqttQos
 import com.hivemq.client.mqtt.mqtt3.Mqtt3AsyncClient
 import com.hivemq.client.mqtt.mqtt3.message.publish.Mqtt3Publish
 import kotlinx.coroutines.*
+import java.util.UUID
 
 /**
  * MQTT 接続管理クラス
@@ -45,7 +46,8 @@ class MqttManager(
      * MQTT クライアントを初期化
      */
     fun initialize() {
-        val clientId = "${AppConfig.Mqtt.CLIENT_ID_PREFIX}_${System.currentTimeMillis()}"
+        // 取得先ごとに 1 本ずつ張るため、同時に作られても衝突しない ID にする
+        val clientId = "${AppConfig.Mqtt.CLIENT_ID_PREFIX}_${UUID.randomUUID()}"
 
         client = MqttClient.builder()
             .useMqttVersion3()
