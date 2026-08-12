@@ -27,6 +27,7 @@ class SettingsRepository(private val context: Context) {
         private val OVERLAY_ENABLED_KEY = booleanPreferencesKey("overlay_enabled")
         private val MAX_MESSAGE_LENGTH_KEY = intPreferencesKey("max_message_length")
         private val OVERLAY_ALPHA_KEY = intPreferencesKey("overlay_alpha")
+        private val OVERLAY_TEXT_COLOR_KEY = intPreferencesKey("overlay_text_color")
         private val SPEECH_RATE_KEY = intPreferencesKey("speech_rate")
         private val SPEECH_VOLUME_KEY = intPreferencesKey("speech_volume")
         private val AUTO_START_ON_LAUNCH_KEY = booleanPreferencesKey("auto_start_on_launch")
@@ -62,6 +63,14 @@ class SettingsRepository(private val context: Context) {
     val overlayAlphaFlow: Flow<Int> = context.dataStore.data
         .map { preferences ->
             preferences[OVERLAY_ALPHA_KEY] ?: AppConfig.Overlay.DEFAULT_ALPHA
+        }
+
+    /**
+     * オーバーレイの文字色を取得（Flow）。ARGB の整数
+     */
+    val overlayTextColorFlow: Flow<Int> = context.dataStore.data
+        .map { preferences ->
+            preferences[OVERLAY_TEXT_COLOR_KEY] ?: AppConfig.Overlay.DEFAULT_TEXT_COLOR
         }
 
     /**
@@ -129,6 +138,17 @@ class SettingsRepository(private val context: Context) {
     suspend fun saveOverlayAlpha(alpha: Int) {
         context.dataStore.edit { preferences ->
             preferences[OVERLAY_ALPHA_KEY] = alpha
+        }
+    }
+
+    /**
+     * オーバーレイの文字色を保存
+     *
+     * @param color ARGB の整数
+     */
+    suspend fun saveOverlayTextColor(color: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[OVERLAY_TEXT_COLOR_KEY] = color
         }
     }
 

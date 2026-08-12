@@ -60,9 +60,13 @@ class OverlayManager(private val context: Context) {
      * オーバーレイウィンドウを作成
      *
      * @param alpha 背景の濃さ（0〜100 の整数 %）
+     * @param textColor メッセージの文字色（ARGB）
      * @return 作成に成功した場合 true
      */
-    fun create(alpha: Int = 80): Boolean {
+    fun create(
+        alpha: Int = AppConfig.Overlay.DEFAULT_ALPHA,
+        textColor: Int = AppConfig.Overlay.DEFAULT_TEXT_COLOR
+    ): Boolean {
         if (!hasOverlayPermission()) {
             Log.w(TAG, "Overlay permission not granted")
             return false
@@ -97,7 +101,7 @@ class OverlayManager(private val context: Context) {
 
             messageTextView?.apply {
                 text = "サービス稼働中"
-                setTextColor(Color.LTGRAY)
+                setTextColor(textColor)
                 textSize = AppConfig.Overlay.MESSAGE_TEXT_SIZE
             }
 
@@ -202,6 +206,17 @@ class OverlayManager(private val context: Context) {
     fun updateAlpha(alpha: Int) {
         mainHandler.post {
             overlayView?.setBackgroundColor(Color.argb(alpha * 255 / 100, 0, 0, 0))
+        }
+    }
+
+    /**
+     * オーバーレイメッセージの文字色を更新
+     *
+     * @param color ARGB の整数
+     */
+    fun updateTextColor(color: Int) {
+        mainHandler.post {
+            messageTextView?.setTextColor(color)
         }
     }
 

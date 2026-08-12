@@ -45,6 +45,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _overlayAlpha = MutableStateFlow(AppConfig.Overlay.DEFAULT_ALPHA)
     val overlayAlpha: StateFlow<Int> = _overlayAlpha.asStateFlow()
 
+    private val _overlayTextColor = MutableStateFlow(AppConfig.Overlay.DEFAULT_TEXT_COLOR)
+    val overlayTextColor: StateFlow<Int> = _overlayTextColor.asStateFlow()
+
     private val _speechRate = MutableStateFlow(AppConfig.Tts.DEFAULT_SPEECH_RATE)
     val speechRate: StateFlow<Int> = _speechRate.asStateFlow()
 
@@ -63,6 +66,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _isOverlayEnabled.value = settingsRepository.overlayEnabledFlow.first()
             _maxMessageLength.value = settingsRepository.maxMessageLengthFlow.first()
             _overlayAlpha.value = settingsRepository.overlayAlphaFlow.first()
+            _overlayTextColor.value = settingsRepository.overlayTextColorFlow.first()
             _speechRate.value = settingsRepository.speechRateFlow.first()
             _speechVolume.value = settingsRepository.speechVolumeFlow.first()
             _autoStartOnLaunch.value = settingsRepository.autoStartOnLaunchFlow.first()
@@ -99,7 +103,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * サービスを開始
      */
     fun startService() {
-        serviceController.start(_boardId.value, _maxMessageLength.value, _overlayAlpha.value)
+        serviceController.start(
+            boardId = _boardId.value,
+            maxMessageLength = _maxMessageLength.value,
+            overlayAlpha = _overlayAlpha.value,
+            overlayTextColor = _overlayTextColor.value
+        )
         _isServiceRunning.value = true
     }
 
@@ -139,6 +148,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateOverlayAlpha(alpha: Int) =
         updateAndSave(_overlayAlpha, alpha, settingsRepository::saveOverlayAlpha) {
             serviceController.setOverlayAlpha(it)
+        }
+
+    /**
+     * オーバーレイの文字色を更新・保存
+     */
+    fun updateOverlayTextColor(color: Int) =
+        updateAndSave(_overlayTextColor, color, settingsRepository::saveOverlayTextColor) {
+            serviceController.setOverlayTextColor(it)
         }
 
     /**

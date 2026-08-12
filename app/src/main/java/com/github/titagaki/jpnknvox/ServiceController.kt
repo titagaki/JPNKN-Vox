@@ -23,12 +23,14 @@ class ServiceController(context: Context) {
     fun start(
         boardId: String,
         maxMessageLength: Int = AppConfig.Tts.DEFAULT_MAX_MESSAGE_LENGTH,
-        overlayAlpha: Int = AppConfig.Overlay.DEFAULT_ALPHA
+        overlayAlpha: Int = AppConfig.Overlay.DEFAULT_ALPHA,
+        overlayTextColor: Int = AppConfig.Overlay.DEFAULT_TEXT_COLOR
     ) {
         val intent = Intent(appContext, JpnknVoxService::class.java).apply {
             putExtra(JpnknVoxService.EXTRA_BOARD_ID, boardId)
             putExtra(JpnknVoxService.EXTRA_MAX_MESSAGE_LENGTH, maxMessageLength)
             putExtra(JpnknVoxService.EXTRA_OVERLAY_ALPHA, overlayAlpha)
+            putExtra(JpnknVoxService.EXTRA_OVERLAY_TEXT_COLOR, overlayTextColor)
         }
         appContext.startForegroundService(intent)
         MessageManager.addSystemLog("サービスを開始しました (板: $boardId)")
@@ -76,6 +78,18 @@ class ServiceController(context: Context) {
             .putExtra(JpnknVoxService.EXTRA_OVERLAY_ALPHA, alpha)
         appContext.startService(intent)
         Log.d(TAG, "Overlay alpha set to: $alpha")
+    }
+
+    /**
+     * オーバーレイの文字色をサービスに即時反映する
+     *
+     * @param color ARGB の整数
+     */
+    fun setOverlayTextColor(color: Int) {
+        val intent = Intent(appContext, JpnknVoxService::class.java)
+            .putExtra(JpnknVoxService.EXTRA_OVERLAY_TEXT_COLOR, color)
+        appContext.startService(intent)
+        Log.d(TAG, "Overlay text color set to: $color")
     }
 
     /**

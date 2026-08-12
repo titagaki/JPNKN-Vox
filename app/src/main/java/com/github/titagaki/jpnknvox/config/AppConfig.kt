@@ -60,6 +60,10 @@ object AppConfig {
 
         /** 背景の濃さの既定値（0〜100 %） */
         const val DEFAULT_ALPHA = 80
+
+        /** メッセージの文字色の既定値（ARGB） */
+        const val DEFAULT_TEXT_COLOR = 0xFFCCCCCC.toInt()
+
         const val INITIAL_Y_POSITION = 100
         const val STATUS_TEXT_SIZE = 14f
         const val MESSAGE_TEXT_SIZE = 12f

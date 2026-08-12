@@ -223,6 +223,7 @@ fun JpnknVoxApp(
                 val isOverlayEnabled by viewModel.isOverlayEnabled.collectAsState()
                 val maxMessageLength by viewModel.maxMessageLength.collectAsState()
                 val overlayAlpha by viewModel.overlayAlpha.collectAsState()
+                val overlayTextColor by viewModel.overlayTextColor.collectAsState()
                 val speechRate by viewModel.speechRate.collectAsState()
                 val speechVolume by viewModel.speechVolume.collectAsState()
                 val autoStartOnLaunch by viewModel.autoStartOnLaunch.collectAsState()
@@ -236,6 +237,8 @@ fun JpnknVoxApp(
                     onOverlayEnabledChange = { viewModel.updateOverlayEnabled(it) },
                     overlayAlpha = overlayAlpha,
                     onOverlayAlphaChange = { viewModel.updateOverlayAlpha(it) },
+                    overlayTextColor = overlayTextColor,
+                    onOverlayTextColorChange = { viewModel.updateOverlayTextColor(it) },
                     maxMessageLength = maxMessageLength,
                     onMaxMessageLengthChange = { viewModel.updateMaxMessageLength(it) },
                     speechRate = speechRate,
