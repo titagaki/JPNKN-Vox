@@ -3,13 +3,36 @@
 **バージョン**: 1.3
 **作成日**: 2026-02-28
 **最終更新**: 2026-03-20
-**対応 SRS**: `docs/SRS-jpnkn-vox.md`
+**対応 SRS**: `docs/spec/SRS-jpnkn-vox.md`
 
 ---
 
 ## 1. システム全体構成
 
-### 1.1 コンポーネント図
+### 1.1 ディレクトリ構成
+
+```
+app/src/main/java/com/github/titagaki/jpnknvox/
+├── MainActivity.kt          # エントリーポイント（Compose UI）
+├── MainViewModel.kt         # UI状態管理
+├── JpnknVoxService.kt       # フォアグラウンドサービス（メイン処理）
+├── ServiceController.kt     # サービスライフサイクル制御
+├── config/AppConfig.kt      # 定数・設定値（MQTTサーバー情報等）
+├── data/
+│   ├── JpnknMessage.kt      # MQTTペイロードのデータモデル
+│   ├── MessageLog.kt        # 表示用ログエントリ
+│   ├── MessageManager.kt    # Singleton StateFlow（メッセージ状態）
+│   └── SettingsRepository.kt # DataStore永続化
+├── mqtt/MqttManager.kt      # MQTT接続・再接続管理
+├── tts/TtsManager.kt        # TTS管理・キュー制御
+├── overlay/OverlayManager.kt # WindowManagerオーバーレイ
+└── ui/
+    ├── screens/             # Home / Log / Settings 画面
+    ├── navigation/Screen.kt # ナビゲーション定義
+    └── theme/               # Color / Theme / Type
+```
+
+### 1.2 コンポーネント図
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -29,7 +52,7 @@
 └─────────────────────────────────────────────────────┘
 ```
 
-### 1.2 データフロー
+### 1.3 データフロー
 
 ```
 [MQTT ブローカー]
@@ -46,7 +69,7 @@ JpnknMessage.fromJson()          ← パース失敗時は onError にフォー�
       └─► TtsManager.enqueue()         → TextToSpeech → スピーカー
 ```
 
-### 1.3 サービス制御フロー
+### 1.4 サービス制御フロー
 
 ```
 UI スイッチ ON

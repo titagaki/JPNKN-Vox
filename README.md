@@ -78,8 +78,8 @@
 
 ## ドキュメント
 
-- [`docs/SRS-jpnkn-vox.md`](docs/SRS-jpnkn-vox.md) — ソフトウェア要件仕様書
-- [`docs/DESIGN-jpnkn-vox.md`](docs/DESIGN-jpnkn-vox.md) — 詳細設計書
+- [`docs/spec/SRS-jpnkn-vox.md`](docs/spec/SRS-jpnkn-vox.md) — ソフトウェア要件仕様書
+- [`docs/spec/DESIGN-jpnkn-vox.md`](docs/spec/DESIGN-jpnkn-vox.md) — 詳細設計書
 
 ## ライセンス
 

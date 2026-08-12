@@ -18,28 +18,7 @@ IRL配信（屋外配信）での手放し運用を想定。
 - **設定永続化:** Jetpack DataStore
 - **バックグラウンド:** Foreground Service
 
-## ディレクトリ構成
-
-```
-app/src/main/java/com/github/titagaki/jpnknvox/
-├── MainActivity.kt          # エントリーポイント（Compose UI）
-├── MainViewModel.kt         # UI状態管理
-├── JpnknVoxService.kt       # フォアグラウンドサービス（メイン処理）
-├── ServiceController.kt     # サービスライフサイクル制御
-├── config/AppConfig.kt      # 定数・設定値（MQTTサーバー情報等）
-├── data/
-│   ├── JpnknMessage.kt      # MQTTペイロードのデータモデル
-│   ├── MessageLog.kt        # 表示用ログエントリ
-│   ├── MessageManager.kt    # Singleton StateFlow（メッセージ状態）
-│   └── SettingsRepository.kt # DataStore永続化
-├── mqtt/MqttManager.kt      # MQTT接続・再接続管理
-├── tts/TtsManager.kt        # TTS管理・キュー制御
-├── overlay/OverlayManager.kt # WindowManagerオーバーレイ
-└── ui/
-    ├── screens/             # Home / Log / Settings 画面
-    ├── navigation/Screen.kt # ナビゲーション定義
-    └── theme/               # Color / Theme / Type
-```
+ディレクトリ構成は `docs/spec/DESIGN-jpnkn-vox.md` §1.1 を参照。
 
 ## ビルド・テスト
 
@@ -67,19 +46,8 @@ app/src/main/java/com/github/titagaki/jpnknvox/
 
 ## MQTT仕様
 
-- **サーバー:** bbs.jpnkn.com:1883
-- **認証情報:** AppConfig.ktに定義
-- **トピック形式:** `bbs/{boardId}`（例: `bbs/mamiko`）
-- **ペイロード（JSON）:**
-  ```json
-  {
-    "body": "名前<>メール<>日時<>本文<>",
-    "no": "レス番号",
-    "bbsid": "板ID",
-    "threadkey": "スレッドキー"
-  }
-  ```
-- **再接続:** 指数バックオフ（1〜60秒、最大10回）
+接続情報・ペイロード形式は `docs/spec/jpnkn-api-spec.md`、
+再接続やクライアント実装は `docs/spec/DESIGN-jpnkn-vox.md` §2.4 を参照。
 
 ## 必要なパーミッション
 
@@ -102,8 +70,24 @@ app/src/main/java/com/github/titagaki/jpnknvox/
 
 ## ドキュメント
 
-- `docs/SRS-jpnkn-vox.md` — ソフトウェア要件定義書
-- `docs/DESIGN-jpnkn-vox.md` — 設計書（クラス図・状態遷移図）
-- `docs/jpnkn-api-spec.md` — MQTT APIスペック
-- `docs/schema-jpnkn.json` — MQTT ペイロードの JSON スキーマ
+| 置き場所 | 内容 |
+|---|---|
+| `CLAUDE.md` | 毎回必ず守るルールだけ（目安100行以内） |
+| `docs/spec/` | 仕様・設計書（検証済みのもの） |
+| `docs/investigations/` | 未検証の調査結果。事実と仮説を明記して分ける |
+| `docs/roadmap.md` | タスクの進捗状態 |
+| `.claude/rules/` | Claudeへの追加指示 |
+
+**運用ルール**
+
+- 新しい文書を作る前に `docs/` 配下を検索し、重複がないか確認する
+- 調査結果は検証済みになった時点で `docs/spec/` へ昇格し、元の `docs/investigations/` のファイルは削除する
+- タスクを進めたら `docs/roadmap.md` を更新する
+
+**既存の文書**
+
+- `docs/spec/SRS-jpnkn-vox.md` — ソフトウェア要件定義書
+- `docs/spec/DESIGN-jpnkn-vox.md` — 設計書（ディレクトリ構成・クラス図・状態遷移図）
+- `docs/spec/jpnkn-api-spec.md` — MQTT APIスペック
+- `docs/spec/schema-jpnkn.json` — MQTT ペイロードの JSON スキーマ
 - `README.md` — ユーザー向けインストール・ビルド手順（日本語）
