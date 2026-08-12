@@ -32,6 +32,7 @@ import com.github.titagaki.jpnknvox.data.MessageManager
 import com.github.titagaki.jpnknvox.ui.navigation.Screen
 import com.github.titagaki.jpnknvox.ui.screens.HomeScreen
 import com.github.titagaki.jpnknvox.ui.screens.LogScreen
+import com.github.titagaki.jpnknvox.ui.screens.DebugScreen
 import com.github.titagaki.jpnknvox.ui.screens.SettingsScreen
 import com.github.titagaki.jpnknvox.ui.theme.JPNKNVoxTheme
 
@@ -222,6 +223,18 @@ fun JpnknVoxApp(
                     onRequestNotificationPermission = onRequestNotificationPermission,
                     onRequestOverlayPermission = onRequestOverlayPermission
                 )
+            }
+
+            // デバッグ画面（デバッグビルドのみ）
+            if (BuildConfig.DEBUG) {
+                composable(Screen.Debug.route) {
+                    DebugScreen(
+                        isServiceRunning = isServiceRunning,
+                        onStartTestBurst = { count, intervalMs ->
+                            viewModel.startTestBurst(count, intervalMs)
+                        }
+                    )
+                }
             }
         }
     }

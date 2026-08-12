@@ -20,10 +20,16 @@ import com.github.titagaki.jpnknvox.overlay.OverlayManager
 import com.github.titagaki.jpnknvox.tts.TtsManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * JPNKN Vox のバックグラウンドサービス
@@ -45,9 +51,36 @@ class JpnknVoxService : Service() {
         const val EXTRA_OVERLAY_ALPHA = "extra_overlay_alpha"
         const val EXTRA_OVERLAY_ENABLED = "extra_overlay_enabled"
 
+        /**
+         * 連投テスト（デバッグビルドのみ）
+         *
+         * MQTT を経由せずダミーメッセージを受信経路に流し込み、
+         * 読み上げキュー・オーバーレイ・ログの挙動を実機で確認する。
+         *
+         * adb からの実行例:
+         * ```
+         * adb shell am start-service \
+         *   -n com.github.titagaki.jpnknvox.debug/com.github.titagaki.jpnknvox.JpnknVoxService \
+         *   -a com.github.titagaki.jpnknvox.action.TEST_BURST --ei extra_test_count 20 --el extra_test_interval_ms 300
+         * ```
+         */
+        const val ACTION_TEST_BURST = "com.github.titagaki.jpnknvox.action.TEST_BURST"
+        const val EXTRA_TEST_COUNT = "extra_test_count"
+        const val EXTRA_TEST_INTERVAL_MS = "extra_test_interval_ms"
+
         /** サービスが現在稼働中かどうかを示すフラグ */
         var isRunning: Boolean = false
             private set
+
+        /** 連投テスト用のダミー本文（長さの異なる複数パターンを循環させる） */
+        private val TEST_MESSAGE_BODIES = listOf(
+            "テストです",
+            "連投テスト中。読み上げが追いつくか確認しています。",
+            "うぽつ",
+            "これは長めのテストメッセージです。文字数制限と読み上げ間隔の設定がどう効くかを確認するために、わざと長い本文にしてあります。最後まで読み上げられるか、途中で省略されるかを見てください。",
+            "www",
+            "音声が重ならずに順番どおり読み上げられているか確認してください。"
+        )
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -65,6 +98,9 @@ class JpnknVoxService : Service() {
 
     // オーバーレイ背景の濃さ（0〜100 %）
     private var overlayAlpha: Int = 80
+
+    // 連投テストの送信ジョブ（デバッグビルドのみ使用）
+    private var testBurstJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -111,6 +147,19 @@ class JpnknVoxService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "Service onStartCommand")
 
+        // 連投テスト（デバッグビルドのみ）
+        if (intent?.action == ACTION_TEST_BURST) {
+            startTestBurst(
+                count = intent.getIntExtra(EXTRA_TEST_COUNT, AppConfig.TestBurst.DEFAULT_COUNT),
+                intervalMs = intent.getLongExtra(
+                    EXTRA_TEST_INTERVAL_MS,
+                    AppConfig.TestBurst.DEFAULT_INTERVAL_MS
+                )
+            )
+            startForegroundServiceWithNotification()
+            return START_STICKY
+        }
+
         // 板 ID を Intent から取得（起動時のみ有効）
         intent?.getStringExtra(EXTRA_BOARD_ID)?.let {
             boardId = it
@@ -146,6 +195,10 @@ class JpnknVoxService : Service() {
         isRunning = false
         Log.d(TAG, "Service onDestroy")
         MessageManager.addSystemLog("サービスを停止しています...")
+
+        // 連投テストを中断
+        testBurstJob?.cancel()
+        testBurstJob = null
 
         // オーバーレイを削除
         overlayManager?.remove()
@@ -236,6 +289,56 @@ class JpnknVoxService : Service() {
         MessageManager.addMessage(message)
         overlayManager?.updateMessage(text)
         ttsManager?.enqueue(ttsText)
+    }
+
+    // ========================================
+    // 連投テスト（デバッグビルドのみ）
+    // ========================================
+
+    /**
+     * ダミーメッセージを一定間隔で受信経路に流し込む
+     *
+     * @param count 送信件数
+     * @param intervalMs 送信間隔（ミリ秒）。0 で一括投入
+     */
+    private fun startTestBurst(count: Int, intervalMs: Long) {
+        if (!BuildConfig.DEBUG) {
+            Log.w(TAG, "Test burst is available only in debug builds")
+            return
+        }
+
+        val safeCount = count.coerceIn(1, AppConfig.TestBurst.MAX_COUNT)
+        val safeInterval = intervalMs.coerceIn(0L, AppConfig.TestBurst.MAX_INTERVAL_MS)
+
+        testBurstJob?.cancel()
+        testBurstJob = serviceScope.launch {
+            MessageManager.addSystemLog("連投テスト開始: ${safeCount}件 / ${safeInterval}ms 間隔")
+            Log.d(TAG, "Test burst started: count=$safeCount, interval=${safeInterval}ms")
+
+            repeat(safeCount) { index ->
+                onMessageReceived(createTestMessage(index + 1))
+                if (index < safeCount - 1) delay(safeInterval)
+            }
+
+            MessageManager.addSystemLog("連投テスト送信完了: ${safeCount}件")
+        }
+    }
+
+    /**
+     * テスト用のダミーメッセージを生成する
+     *
+     * 実際の連投に近づけるため、本文の長さは数パターンを循環させる
+     */
+    private fun createTestMessage(index: Int): JpnknMessage {
+        val text = TEST_MESSAGE_BODIES[(index - 1) % TEST_MESSAGE_BODIES.size]
+        val date = SimpleDateFormat("yyyy/MM/dd(E) HH:mm:ss", Locale.JAPAN).format(Date())
+
+        return JpnknMessage(
+            body = "テスト$index<>sage<>$date<>$index 件目 $text<>",
+            no = index.toString(),
+            bbsid = boardId.ifEmpty { "test" },
+            threadkey = "0"
+        )
     }
 
     // ========================================

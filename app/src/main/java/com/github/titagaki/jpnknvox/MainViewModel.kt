@@ -98,6 +98,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             serviceController.setOverlayAlpha(it)
         }
 
+    /**
+     * 連投テストを開始する（デバッグビルドのみ動作）
+     *
+     * サービス稼働中でなければ何もしない。
+     */
+    fun startTestBurst(count: Int, intervalMs: Long) {
+        if (!_isServiceRunning.value) {
+            Log.w(TAG, "Test burst ignored: service is not running")
+            return
+        }
+        serviceController.startTestBurst(count, intervalMs)
+    }
+
     private fun <T> updateAndSave(
         flow: MutableStateFlow<T>,
         value: T,
