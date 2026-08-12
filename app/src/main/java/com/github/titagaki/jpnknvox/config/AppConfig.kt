@@ -52,6 +52,22 @@ object AppConfig {
 
         /** テスト再生で読み上げるテキスト */
         const val TEST_TEXT = "じゃぱんくん-Vox のテスト再生です"
+
+        /**
+         * 1 件読み上げてから次の 1 件を読み始めるまでの間隔（ミリ秒）
+         *
+         * 短くすると連投に追従しやすくなるが、聞き取りづらくなる。
+         * 連投テストモード（デバッグビルド）で実際の聞こえ方を確認しながら調整する。
+         */
+        const val SPEECH_INTERVAL_MS = 1000L
+    }
+
+    // 連投テスト設定（デバッグビルドのみ使用）
+    object TestBurst {
+        const val DEFAULT_COUNT = 20
+        const val DEFAULT_INTERVAL_MS = 300L
+        const val MAX_COUNT = 500
+        const val MAX_INTERVAL_MS = 10000L
     }
 
     // オーバーレイ設定

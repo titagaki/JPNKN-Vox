@@ -35,7 +35,9 @@ class TtsManager(
 
     companion object {
         private const val TAG = "TtsManager"
-        private const val SPEECH_INTERVAL_MS = 500L
+
+        /** 読み上げ間隔。調整は [AppConfig.Tts.SPEECH_INTERVAL_MS] で行う */
+        private const val SPEECH_INTERVAL_MS = AppConfig.Tts.SPEECH_INTERVAL_MS
     }
 
     private var tts: TextToSpeech? = TextToSpeech(context, this)

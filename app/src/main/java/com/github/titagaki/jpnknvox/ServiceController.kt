@@ -101,5 +101,20 @@ class ServiceController(context: Context) {
         appContext.startService(intent)
         Log.d(TAG, "Speech volume set to: $volume")
     }
+
+    /**
+     * 連投テストを開始する（デバッグビルドのみ動作）
+     *
+     * @param count 送信件数
+     * @param intervalMs 送信間隔（ミリ秒）
+     */
+    fun startTestBurst(count: Int, intervalMs: Long) {
+        val intent = Intent(appContext, JpnknVoxService::class.java)
+            .setAction(JpnknVoxService.ACTION_TEST_BURST)
+            .putExtra(JpnknVoxService.EXTRA_TEST_COUNT, count)
+            .putExtra(JpnknVoxService.EXTRA_TEST_INTERVAL_MS, intervalMs)
+        appContext.startService(intent)
+        Log.d(TAG, "Test burst requested: count=$count, interval=${intervalMs}ms")
+    }
 }
 

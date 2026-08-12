@@ -191,6 +191,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * 連投テストを開始する（デバッグビルドのみ動作）
+     *
+     * サービス稼働中でなければ何もしない。
+     */
+    fun startTestBurst(count: Int, intervalMs: Long) {
+        if (!_isServiceRunning.value) {
+            Log.w(TAG, "Test burst ignored: service is not running")
+            return
+        }
+        serviceController.startTestBurst(count, intervalMs)
+    }
+
     override fun onCleared() {
         previewTtsManager?.shutdown()
         previewTtsManager = null
