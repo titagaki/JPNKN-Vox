@@ -10,3 +10,6 @@
 local.properties
 .kotlin/
 *.jks
+
+# Claude Code のローカル専用設定（共有しない）
+.claude/settings.local.json
