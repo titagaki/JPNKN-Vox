@@ -61,7 +61,12 @@ object AppConfig {
         /** チャットの IRC サーバ（WebSocket） */
         const val IRC_URL = "wss://irc-ws.chat.twitch.tv:443"
 
-        /** IRC サーバのホスト名。PING に返す PONG のパラメータに使う */
+        /**
+         * IRC サーバのホスト名
+         *
+         * PONG には受け取った PING の中身をそのまま返すので、
+         * これはその中身が空だった場合に使う既定値。
+         */
         const val IRC_HOST = "tmi.twitch.tv"
 
         /**

@@ -441,7 +441,8 @@ UI スイッチ OFF
 
 #### `TwitchConnector`（`source/`）
 - **責務**: 接続 → JOIN → コメント受信 → 切断 を繰り返す状態遷移（コルーチンの 1 ループ）
-  1. `TwitchClient.openChat()` で IRC に繋ぎ、JOIN の完了（`366`）を待つ
+  1. `TwitchClient.openChat()` で IRC に繋ぎ、JOIN の完了（`366`）を待つ。
+     待つ間に切断されたらそちらを優先して抜ける（`select` で両方を待つ）
   2. 完了したら `CONNECTED`。切断されるまで受け続ける
   3. 切れたら 5 秒待って 1 に戻る
 - **チャットは配信していない間も動く**ため、ツイキャスのような配信待ちの状態は持たない
@@ -681,7 +682,7 @@ sealed class Screen(route, title, icon)
 | `Twicas` | `BROADCAST_POLLING_INTERVAL_MS` | `5000L`（配信開始待ちのポーリング間隔） |
 | `Twicas` | `RECONNECT_DELAY_MS` | `5000L` |
 | `Twitch` | `IRC_URL` | `wss://irc-ws.chat.twitch.tv:443` |
-| `Twitch` | `IRC_HOST` | `tmi.twitch.tv`（`PONG` のパラメータ） |
+| `Twitch` | `IRC_HOST` | `tmi.twitch.tv`（`PONG` に返す中身が空だった場合の既定値） |
 | `Twitch` | `ANONYMOUS_NICK_PREFIX` | `justinfan` |
 | `Twitch` | `CAPABILITIES` | `twitch.tv/tags twitch.tv/commands` |
 | `Twitch` | `GQL_URL` | `https://gql.twitch.tv/gql` |

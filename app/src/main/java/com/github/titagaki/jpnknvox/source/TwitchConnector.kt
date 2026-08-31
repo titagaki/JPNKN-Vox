@@ -13,6 +13,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.WebSocket
 
@@ -131,27 +132,37 @@ class TwitchConnector(
     /**
      * JOIN の完了を待ち、結果を状態に反映する
      *
+     * JOIN の完了と切断のどちらか早い方を取る。切れたあとも JOIN を待ち続けると、
+     * 電波の切り替わりで繋ぎ直すたびに待ち時間の分だけ復帰が遅れる。
+     *
      * @return コメントの受信を続けてよいかどうか。JOIN が通らなかった場合は false
      */
     private suspend fun awaitJoin(
         joined: CompletableDeferred<Unit>,
         closed: CompletableDeferred<Throwable?>
     ): Boolean {
-        val result = withTimeoutOrNull(AppConfig.Twitch.JOIN_TIMEOUT_MS) {
-            joined.await()
+        val didJoin = withTimeoutOrNull(AppConfig.Twitch.JOIN_TIMEOUT_MS) {
+            select {
+                joined.onAwait { true }
+                closed.onAwait { false }
+            }
         }
 
-        if (result != null) {
-            updateStatus(SourceStatus.CONNECTED, "${source.sourceId}: チャットに接続しました")
-            return true
+        return when (didJoin) {
+            true -> {
+                updateStatus(SourceStatus.CONNECTED, "${source.sourceId}: チャットに接続しました")
+                true
+            }
+
+            // 待っている間に切れた。呼び出し元にそのまま切断として扱わせる
+            false -> true
+
+            // 時間内に JOIN も切断も起きなかった
+            null -> {
+                updateStatus(SourceStatus.ERROR, "${source.sourceId}: チャンネルが見つかりません")
+                false
+            }
         }
-
-        // 待っている間に切れていたなら、JOIN が来ないのは切断のせい。
-        // 呼び出し元にそのまま切断として扱わせる
-        if (closed.isCompleted) return true
-
-        updateStatus(SourceStatus.ERROR, "${source.sourceId}: チャンネルが見つかりません")
-        return false
     }
 
     /**

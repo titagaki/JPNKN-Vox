@@ -133,8 +133,11 @@ class TwitchClient(
 
             private fun handleLine(webSocket: WebSocket, line: TwitchIrcLine) {
                 when (line.command) {
+                    // IRC の作法として、受け取った PING の中身をそのまま返す
                     TwitchEvent.CMD_PING ->
-                        webSocket.send("PONG :${AppConfig.Twitch.IRC_HOST}")
+                        webSocket.send(
+                            "PONG :${line.trailing.ifEmpty { AppConfig.Twitch.IRC_HOST }}"
+                        )
 
                     TwitchEvent.CMD_PRIVMSG ->
                         TwitchEvent.toComment(line)?.let(callbacks::onComment)

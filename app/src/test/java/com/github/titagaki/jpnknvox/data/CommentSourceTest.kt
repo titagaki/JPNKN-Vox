@@ -135,6 +135,17 @@ class CommentSourceTest {
     fun `locationHint - 種別ごとに取得先の場所を表す`() {
         assertEquals("bbs/mamiko", SourceType.JPNKN.locationHint("mamiko"))
         assertEquals("twitcasting.tv/pcast_live", SourceType.TWICAS.locationHint("pcast_live"))
+        assertEquals("twitch.tv/shroud", SourceType.TWITCH.locationHint("shroud"))
+    }
+
+    @Test
+    fun `locationHint - どの種別でも場所を出す`() {
+        SourceType.entries.forEach { type ->
+            assertTrue(
+                "${type.name} の場所が空でないこと",
+                type.locationHint("abc").isNotBlank()
+            )
+        }
     }
 
     @Test

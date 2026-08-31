@@ -45,11 +45,15 @@ enum class SourceType(
      *
      * @return ID が空の場合は空文字列（入力例を出すためのものではない）
      */
-    fun locationHint(sourceId: String): String = when {
-        sourceId.isBlank() -> ""
-        this == JPNKN -> "${AppConfig.Mqtt.TOPIC_PREFIX}$sourceId"
-        this == TWICAS -> "twitcasting.tv/$sourceId"
-        else -> "twitch.tv/$sourceId"
+    fun locationHint(sourceId: String): String {
+        if (sourceId.isBlank()) return ""
+
+        // 種別を足したときにここの追加を忘れないよう、else を置かない
+        return when (this) {
+            JPNKN -> "${AppConfig.Mqtt.TOPIC_PREFIX}$sourceId"
+            TWICAS -> "twitcasting.tv/$sourceId"
+            TWITCH -> "twitch.tv/$sourceId"
+        }
     }
 
     companion object {
