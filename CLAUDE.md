@@ -6,7 +6,7 @@ JPNKN掲示板（bbs.jpnkn.com）・ツイキャス・Twitchのリアルタイ�
 取得先は複数登録でき、同時に読み上げる。IRL配信（屋外配信）での手放し運用を想定。
 
 **パッケージ名:** `com.github.titagaki.jpnknvox`
-**バージョン:** 0.2.0
+**バージョン:** 0.2.1
 **最小SDK:** Android 12 (API 31)
 
 ## 技術スタック
