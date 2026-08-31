@@ -586,9 +586,21 @@ Scaffold
 - **並び順**: 新着が上（`messageLogs.asReversed()`）
 - **リスト**: `LazyColumn`（`key = { it.id }`）
 - **自動スクロール**:
-  - `isAtTop`: `derivedStateOf { listState.firstVisibleItemIndex == 0 }`
-  - `LaunchedEffect(size)` で `isAtTop == true` のときのみ `animateScrollToItem(0)`
-  - 読み返している最中に先頭へ引き戻さないため、先頭にいるときだけ追従する
+  - `stickToTop`: 先頭に張り付くかどうかの状態（`rememberSaveable`。`remember` だと
+    タブの切り替えや画面回転で `true` に戻り、`rememberLazyListState` が復元した
+    読み返し中の位置を先頭へ飛ばしてしまう）。`snapshotFlow` で
+    `isScrollInProgress` と先頭判定（`firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset == 0`）を見て、
+    スクロール中はそのまま反映し、停止中は先頭に着いたときだけ `true` に戻す
+  - 新着を先頭に差し込むとリストの位置はそれまでの項目に固定されて先頭からずれるため、
+    位置の値だけでは「最新を表示中」と「読み返し中」を区別できない。上記のとおり
+    スクロール操作の結果としての位置だけを見て判定する
+  - `LaunchedEffect(先頭のポストの id)` で `stickToTop == true` のときだけ `scrollToItem(0)`。
+    アニメーションなしで引き戻すので、位置は最上位のままコメントだけが下に流れる。
+    件数を鍵にすると `MessageManager` の上限（500 件）に達したあとは常に 500 のままで
+    発火しなくなるため、鍵は id にする
+  - `stickToTop == false`（バックスクロール中）は位置をそのままにし、
+    一覧の上端中央に先頭へ戻る丸ボタン（`Icons.Filled.KeyboardArrowUp`）を重ねる。
+    押すと `animateScrollToItem(0)` で先頭へ戻り、張り付きが復帰する
 - **各アイテムレイアウト**:
   ```
   ▌[no] name（Bold）      ← ▌は取得先の識別色。no は空なら出さない
