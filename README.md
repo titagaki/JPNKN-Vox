@@ -1,14 +1,15 @@
 # JPNKN Vox
 
-[jpnkn.com](https://bbs.jpnkn.com/) 掲示板の新着レスと [ツイキャス](https://twitcasting.tv/) のコメントを
+[jpnkn.com](https://bbs.jpnkn.com/) 掲示板の新着レスと、[ツイキャス](https://twitcasting.tv/)・[Twitch](https://www.twitch.tv/) のコメントを
 Android でリアルタイムに取得・通知するアプリケーション。  
 屋外配信（IRL配信）等の、端末を直接操作できない環境において、コメントの音声読み上げおよび画面オーバーレイ表示を行う。
 
 ## 特徴
 
 - **画面消灯中も動作** — Foreground Service で常駐し、OS によるタスクキルを防止
-- **リアルタイム受信** — jpnkn は MQTT、ツイキャスは WebSocket で新着を即座に受信（自動再接続付き）
+- **リアルタイム受信** — jpnkn は MQTT、ツイキャスと Twitch は WebSocket で新着を即座に受信（自動再接続付き）
 - **複数の取得先** — 板と配信をいくつでも登録でき、まとめて読み上げる。稼働中でも追加・削除できる
+- **アカウント不要** — どの取得先もログインや API キーの登録なしで使える
 - **音声読み上げ** — Android 標準 TextToSpeech でハンズフリー確認
 - **オーバーレイ表示** — 他アプリ使用中でも最新コメントを画面に重ねて表示
 
@@ -44,10 +45,11 @@ Android でリアルタイムに取得・通知するアプリケーション。
   - 未許可の権限がある間はバナーが表示され、許可すると消える。
 3. **コメント取得先の登録**
   - 設定画面の [コメント取得先] > **[コメント取得先を追加]** をタップする。
-  - サービスで **jpnkn** を選ぶと板 ID、**ツイキャス** を選ぶとユーザー ID を入力する。入力欄の下に、その ID がどこを指すか（`bbs/○○` / `twitcasting.tv/○○`）が表示される。
+  - サービスで **jpnkn** を選ぶと板 ID、**ツイキャス** を選ぶとユーザー ID、**Twitch** を選ぶとチャンネル名を入力する。入力欄の下に、その ID がどこを指すか（`bbs/○○` / `twitcasting.tv/○○` / `twitch.tv/○○`）が表示される。
   - 識別色を決め、**[接続をテスト]** で ID が正しいか確認してから追加する。
   - 取得先はいくつでも登録でき、すべて同時に読み上げられる。行をタップすると編集・削除できる。
   - ツイキャスは配信していない間「配信待ち」となり、配信が始まると自動で読み上げを始める。
+  - Twitch のチャットは配信していない間も動くため、配信の有無にかかわらず読み上げる。
 4. **読み上げ設定**
   - [読み上げ] で話す速度・音量・最大文字数を調整できる。**[テスト再生]** で現在の設定を確認できる。
 5. **開始**
@@ -93,6 +95,7 @@ Android でリアルタイムに取得・通知するアプリケーション。
 - [`docs/spec/SRS-jpnkn-vox.md`](docs/spec/SRS-jpnkn-vox.md) — ソフトウェア要件仕様書
 - [`docs/spec/DESIGN-jpnkn-vox.md`](docs/spec/DESIGN-jpnkn-vox.md) — 詳細設計書
 - [`docs/spec/twicas-comment-spec.md`](docs/spec/twicas-comment-spec.md) — ツイキャスのコメント取得仕様
+- [`docs/spec/twitch-comment-spec.md`](docs/spec/twitch-comment-spec.md) — Twitch のコメント取得仕様
 
 ## ライセンス
 

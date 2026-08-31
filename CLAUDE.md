@@ -2,7 +2,7 @@
 
 ## プロジェクト概要
 
-JPNKN掲示板（bbs.jpnkn.com）とツイキャスのリアルタイムコメントを受信し、TTSで読み上げるAndroidアプリ。
+JPNKN掲示板（bbs.jpnkn.com）・ツイキャス・Twitchのリアルタイムコメントを受信し、TTSで読み上げるAndroidアプリ。
 取得先は複数登録でき、同時に読み上げる。IRL配信（屋外配信）での手放し運用を想定。
 
 **パッケージ名:** `com.github.titagaki.jpnknvox`
@@ -52,6 +52,7 @@ JPNKN掲示板（bbs.jpnkn.com）とツイキャスのリアルタイムコメ�
 
 - jpnkn（MQTT）: 接続情報・ペイロード形式は `docs/spec/jpnkn-api-spec.md`
 - ツイキャス: `docs/spec/twicas-comment-spec.md`（**公式 API v2 は使わない**。理由も同ファイル）
+- Twitch: `docs/spec/twitch-comment-spec.md`（**公式 API は使わない**。匿名の IRC を使う。理由も同ファイル）
 - 再接続やクライアント実装は `docs/spec/DESIGN-jpnkn-vox.md` §2.4 を参照
 
 ## 必要なパーミッション
@@ -100,6 +101,7 @@ JPNKN掲示板（bbs.jpnkn.com）とツイキャスのリアルタイムコメ�
 - `docs/spec/jpnkn-api-spec.md` — MQTT APIスペック
 - `docs/spec/schema-jpnkn.json` — MQTT ペイロードの JSON スキーマ
 - `docs/spec/twicas-comment-spec.md` — ツイキャスのコメント取得仕様
+- `docs/spec/twitch-comment-spec.md` — Twitch のコメント取得仕様
 - `docs/references/jpnkn-vox-settings-inline.html` — 設定画面のモックアップ（取得先リスト版）
 - `docs/references/jpnkn-vox-settings.html` — 設定画面のモックアップ（板 ID 1 件だった頃）
 - `README.md` — ユーザー向けインストール・ビルド手順（日本語）

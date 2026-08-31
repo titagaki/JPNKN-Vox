@@ -17,7 +17,7 @@ app/src/main/java/com/github/titagaki/jpnknvox/
 ├── MainViewModel.kt         # UI状態管理
 ├── JpnknVoxService.kt       # フォアグラウンドサービス（メイン処理）
 ├── ServiceController.kt     # サービスライフサイクル制御
-├── config/AppConfig.kt      # 定数・設定値（MQTT/ツイキャス接続情報等）
+├── config/AppConfig.kt      # 定数・設定値（MQTT/ツイキャス/Twitch 接続情報等）
 ├── data/
 │   ├── CommentSource.kt     # コメント取得先（種別・ID・識別色）
 │   ├── ReceivedComment.kt   # 取得先によらないコメントの共通形
@@ -29,11 +29,16 @@ app/src/main/java/com/github/titagaki/jpnknvox/
 │   ├── CommentConnector.kt  # 取得先の接続の抽象（SourceStatus を含む）
 │   ├── JpnknConnector.kt    # jpnkn（MqttManager を包む）
 │   ├── TwicasConnector.kt   # ツイキャス（配信待ち→WebSocket の状態遷移）
+│   ├── TwitchConnector.kt   # Twitch（IRC への接続→JOIN→受信の状態遷移）
 │   └── SourceTester.kt      # 登録前の接続テスト
 ├── mqtt/MqttManager.kt      # MQTT接続・再接続管理
+├── net/SharedHttpClient.kt  # 取得先で共有する OkHttpClient
 ├── twicas/
 │   ├── TwicasClient.kt      # ツイキャスのHTTP/WebSocket通信
 │   └── TwicasEvent.kt       # ツイキャスの応答のパース（純粋関数）
+├── twitch/
+│   ├── TwitchClient.kt      # Twitch の IRC(WebSocket)/HTTP通信
+│   └── TwitchEvent.kt       # IRC の行と GQL 応答のパース（純粋関数）
 ├── tts/TtsManager.kt        # TTS管理・キュー制御
 ├── overlay/OverlayManager.kt # WindowManagerオーバーレイ
 └── ui/
@@ -61,7 +66,8 @@ app/src/main/java/com/github/titagaki/jpnknvox/
 │  CommentConnector × N  /  TtsManager                │
 │  OverlayManager                                     │
 │    ├ JpnknConnector  → MqttManager                  │
-│    └ TwicasConnector → TwicasClient                 │
+│    ├ TwicasConnector → TwicasClient                 │
+│    └ TwitchConnector → TwitchClient                 │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -71,15 +77,16 @@ app/src/main/java/com/github/titagaki/jpnknvox/
 ### 1.3 データフロー
 
 ```
-[MQTT ブローカー]              [ツイキャス コメントサーバ]
-      │ TCP:1883                    │ WebSocket
-      ▼                             ▼
-MqttManager.handleMessage()   TwicasClient (TwicasEvent でパース)
-      │                             │
-      ▼                             ▼
-JpnknConnector                TwicasConnector
-      └──────────┬──────────────────┘
-                 ▼
+[MQTT ブローカー]        [ツイキャス コメントサーバ]      [Twitch IRC]
+      │ TCP:1883              │ WebSocket                │ WebSocket
+      ▼                       ▼                          ▼
+MqttManager           TwicasClient                TwitchClient
+ .handleMessage()      (TwicasEvent でパース)      (TwitchEvent でパース)
+      │                       │                          │
+      ▼                       ▼                          ▼
+JpnknConnector        TwicasConnector             TwitchConnector
+      └───────────────────────┼──────────────────────────┘
+                              ▼
           ReceivedComment          ← 取得先によらない共通形
                  │
       ├─► MessageManager.addMessage()  → messageLogs StateFlow → HomeScreen
@@ -300,16 +307,17 @@ UI スイッチ OFF
 #### `CommentSource` / `SourceType`
 - **種別**: `data class` と `enum class`
 - **責務**: コメント取得先 1 件の設定を表す
-- **`SourceType`**: `JPNKN`（jpnkn 掲示板）、`TWICAS`（ツイキャス）。
+- **`SourceType`**: `JPNKN`（jpnkn 掲示板）、`TWICAS`（ツイキャス）、`TWITCH`（Twitch）。
   永続化用の `id`、設定画面に出す `label` / `idFieldLabel` / `idFieldDescription`、
-  取得先の場所を表す `locationHint(sourceId)`（`bbs/xxx` / `twitcasting.tv/xxx`。ID が空なら空文字列）を持つ
+  取得先の場所を表す `locationHint(sourceId)`（`bbs/xxx` / `twitcasting.tv/xxx` / `twitch.tv/xxx`。
+  ID が空なら空文字列）を持つ
 - **フィールド**:
 
   | フィールド | 型 | 説明 |
   |---|---|---|
   | `uuid` | `String` | 内部識別子。ID を編集しても同じ取得先として追える |
   | `type` | `SourceType` | 取得先の種別 |
-  | `sourceId` | `String` | 板 ID（jpnkn）／ユーザー ID（ツイキャス）。一覧やログの表示にも使う |
+  | `sourceId` | `String` | 板 ID（jpnkn）／ユーザー ID（ツイキャス）／チャンネル名（Twitch）。一覧やログの表示にも使う |
   | `color` | `Int` | 識別色（ARGB。`AppConfig.Source.PALETTE` から選ぶ） |
 
 - **`connectsTo(other)`**: 種別と `sourceId` だけで比較する。
@@ -323,9 +331,10 @@ UI スイッチ OFF
 - **種別**: `data class`
 - **責務**: 取得先の種別によらないコメントの共通形。
   これより先（読み上げ・オーバーレイ・ログ）は取得元を意識しない
-- **フィールド**: `sourceUuid` / `no`（jpnkn のレス番号。ツイキャスには相当するものが無く空文字列）/ `name` / `message`
+- **フィールド**: `sourceUuid` / `no`（jpnkn のレス番号。ツイキャスと Twitch には相当するものが無く空文字列）/ `name` / `message`
 - **生成**: `fun JpnknMessage.toReceivedComment(sourceUuid): ReceivedComment`（拡張関数）、
-  ツイキャスは `TwicasConnector` が `TwicasComment` から組み立てる
+  ツイキャスは `TwicasConnector` が `TwicasComment` から、
+  Twitch は `TwitchConnector` が `TwitchComment` から組み立てる
 
 #### `JpnknMessage`
 - **種別**: `data class`
@@ -405,7 +414,8 @@ UI スイッチ OFF
 
 #### `CommentConnector` / `SourceStatus`（`source/`）
 - **`CommentConnector`**: 取得先 1 件の接続を表すインターフェース（`source` / `start()` / `stop()`）。
-  jpnkn は MQTT、ツイキャスは WebSocket と手段が違うため、サービスからは同じ扱いにする
+  jpnkn は MQTT、ツイキャスは WebSocket、Twitch は IRC over WebSocket と手段が違うため、
+  サービスからは同じ扱いにする
 - **`CommentConnectorCallbacks`**: `onStatusChanged` / `onComment` / `onSystemLog` の 3 つ
 - **`SourceStatus`**: `WAITING` / `CONNECTED` / `WAITING_BROADCAST` / `DISCONNECTED` / `ERROR`。
   それぞれ表示文言（`label`）と、対処が要らない状態かどうか（`isHealthy`）を持つ
@@ -429,21 +439,49 @@ UI スイッチ OFF
 - **接続時に過去のコメントは取得しない**。読み上げアプリで過去ログを喋り始めると事故になるため
 - 配信待ちは 5 秒ごとに回るので、状態が変わった瞬間だけシステムログに出す（`updateStatus`）
 
+#### `TwitchConnector`（`source/`）
+- **責務**: 接続 → JOIN → コメント受信 → 切断 を繰り返す状態遷移（コルーチンの 1 ループ）
+  1. `TwitchClient.openChat()` で IRC に繋ぎ、JOIN の完了（`366`）を待つ
+  2. 完了したら `CONNECTED`。切断されるまで受け続ける
+  3. 切れたら 5 秒待って 1 に戻る
+- **チャットは配信していない間も動く**ため、ツイキャスのような配信待ちの状態は持たない
+- **存在しないチャンネルへの JOIN は成功も失敗も返ってこない**（`docs/spec/twitch-comment-spec.md`）。
+  そのため 10 秒待って `366` が来なければ `ERROR`（チャンネルが見つかりません）にして切り、
+  同じように繋ぎ直す。名前が合っていて通信の側で失敗しただけ、という場合に自力で戻れるようにするため
+- **接続時に過去のコメントは取得しない**（サーバが送ってこない）
+- 再接続を繰り返す間に同じ状態を何度もログへ出さないよう、変わった瞬間だけ出す（`updateStatus`）
+
 #### `SourceTester`（`source/`）
 - **責務**: 取得先を登録する前に ID が正しいかを確かめる
 - jpnkn: 板の URL（`AppConfig.Jpnkn.BOARD_BASE_URL` + 板 ID）が引けるか。
   MQTT はトピックの購読に成功しても板の実在までは分からないため、HTTP で確認する
 - ツイキャス: `TwicasClient.fetchMovie()` の結果で「配信中」「配信の開始を待つ」「ユーザーが見つからない」を出し分ける
+- Twitch: `TwitchClient.fetchChannel()` の結果で「配信中」「チャンネルを確認した」「チャンネルが見つかりません」を出し分ける。
+  配信状態は読み上げの可否とは関係しないので、結果に添えるだけ
 
 #### `TwicasClient` / `TwicasEvent`（`twicas/`）
 - **ライブラリ**: OkHttp（HTTP と WebSocket の両方）
 - 公式 API v2 ではなく認証不要の内部エンドポイントを使う。
   仕様と選定理由は `docs/spec/twicas-comment-spec.md` を参照
 - **`TwicasClient`**: `fetchMovie()`（`streamserver.php`）、
-  `fetchCommentServerUrl()`（`eventpubsuburl.php`）、`openCommentSocket()`（WebSocket）。
-  回線が黙って切れたときに気付けるよう `pingInterval` を 30 秒に設定している
+  `fetchCommentServerUrl()`（`eventpubsuburl.php`）、`openCommentSocket()`（WebSocket）
 - **`TwicasEvent`**: 応答のパースだけを担う純粋関数の置き場（ユニットテストあり）。
   存在しないユーザーは HTTP 200 で `{}` が返るため、`movie` キーの有無で見分ける
+
+#### `TwitchClient` / `TwitchEvent`（`twitch/`）
+- **ライブラリ**: OkHttp（HTTP と WebSocket の両方）
+- 公式 API（Helix）は OAuth が要るため使わず、匿名で繋げる IRC を使う。
+  仕様と選定理由は `docs/spec/twitch-comment-spec.md` を参照
+- **`TwitchClient`**: `openChat()`（IRC over WebSocket。`justinfan` 名で匿名接続し、
+  `PING` への `PONG` はここで完結させる）、`fetchChannel()`（GQL。接続テストでのみ使う）
+- **`TwitchEvent`**: IRC の行と GQL 応答のパースだけを担う純粋関数の置き場（ユニットテストあり）。
+  1 フレームに複数行入るため `parseFrame()` で分割し、`parseLine()` でタグ・prefix・コマンド・
+  引数に分ける。名前は `display-name` タグ（空ならニックネームで代用）
+
+#### `SharedHttpClient`（`net/`）
+- ツイキャスと Twitch で共有する `OkHttpClient`。取得先ごとに作ると
+  スレッドプールと接続プールがその数だけ増えるため 1 つにまとめる
+- 回線が黙って切れたときに WebSocket 側で気付けるよう `pingInterval` を 30 秒に設定している
 
 #### `MqttManager`（`mqtt/`）
 - **ライブラリ**: `com.hivemq:hivemq-mqtt-client:1.3.3`（MQTT v3.1.1）
@@ -642,8 +680,16 @@ sealed class Screen(route, title, icon)
 | `Twicas` | `EVENT_PUBSUB_URL` | `https://twitcasting.tv/eventpubsuburl.php` |
 | `Twicas` | `BROADCAST_POLLING_INTERVAL_MS` | `5000L`（配信開始待ちのポーリング間隔） |
 | `Twicas` | `RECONNECT_DELAY_MS` | `5000L` |
-| `Twicas` | `PING_INTERVAL_SEC` | `30L` |
-| `Twicas` | `REQUEST_TIMEOUT_SEC` | `15L` |
+| `Twitch` | `IRC_URL` | `wss://irc-ws.chat.twitch.tv:443` |
+| `Twitch` | `IRC_HOST` | `tmi.twitch.tv`（`PONG` のパラメータ） |
+| `Twitch` | `ANONYMOUS_NICK_PREFIX` | `justinfan` |
+| `Twitch` | `CAPABILITIES` | `twitch.tv/tags twitch.tv/commands` |
+| `Twitch` | `GQL_URL` | `https://gql.twitch.tv/gql` |
+| `Twitch` | `GQL_CLIENT_ID` | `kimne78kx3ncx6brgo4mv6wki5h1ko`（Web ページが使う公開の値） |
+| `Twitch` | `JOIN_TIMEOUT_MS` | `10000L`（JOIN の完了を待つ時間） |
+| `Twitch` | `RECONNECT_DELAY_MS` | `5000L` |
+| `Http` | `PING_INTERVAL_SEC` | `30L`（ツイキャスと Twitch で共有） |
+| `Http` | `REQUEST_TIMEOUT_SEC` | `15L`（同上） |
 | `Source` | `PALETTE` | 識別色 7 色（赤・黄・緑・水色・青・紫・桃。色相順） |
 | `Notification` | `CHANNEL_ID` | `jpnkn_vox_channel` |
 | `Notification` | `CHANNEL_NAME` | `JPNKN Vox サービス` |
