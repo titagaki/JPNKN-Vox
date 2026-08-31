@@ -30,6 +30,12 @@ enum class SourceType(
         "ツイキャス",
         "ユーザー ID",
         "配信者の URL の twitcasting.tv/ に続く部分"
+    ),
+    TWITCH(
+        "twitch",
+        "Twitch",
+        "チャンネル名",
+        "配信者の URL の twitch.tv/ に続く部分"
     );
 
     /**
@@ -42,7 +48,8 @@ enum class SourceType(
     fun locationHint(sourceId: String): String = when {
         sourceId.isBlank() -> ""
         this == JPNKN -> "${AppConfig.Mqtt.TOPIC_PREFIX}$sourceId"
-        else -> "twitcasting.tv/$sourceId"
+        this == TWICAS -> "twitcasting.tv/$sourceId"
+        else -> "twitch.tv/$sourceId"
     }
 
     companion object {

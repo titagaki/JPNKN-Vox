@@ -2,7 +2,9 @@ package com.github.titagaki.jpnknvox.source
 
 import com.github.titagaki.jpnknvox.config.AppConfig
 import com.github.titagaki.jpnknvox.data.SourceType
+import com.github.titagaki.jpnknvox.net.SharedHttpClient
 import com.github.titagaki.jpnknvox.twicas.TwicasClient
+import com.github.titagaki.jpnknvox.twitch.TwitchClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -23,10 +25,12 @@ sealed interface SourceTestResult {
  * 実際にコメントを受け取るのとは別の、軽い確認だけを行う:
  * - jpnkn: 板の URL が引けるか
  * - ツイキャス: ユーザーが存在するか、いま配信中か
+ * - Twitch: チャンネルが存在するか、いま配信中か
  */
 class SourceTester(
     private val twicasClient: TwicasClient = TwicasClient(),
-    private val httpClient: OkHttpClient = TwicasClient.sharedHttpClient
+    private val twitchClient: TwitchClient = TwitchClient(),
+    private val httpClient: OkHttpClient = SharedHttpClient.instance
 ) {
 
     suspend fun test(type: SourceType, sourceId: String): SourceTestResult =
@@ -38,6 +42,7 @@ class SourceTester(
             when (type) {
                 SourceType.JPNKN -> testJpnkn(sourceId)
                 SourceType.TWICAS -> testTwicas(sourceId)
+                SourceType.TWITCH -> testTwitch(sourceId)
             }
         }
 
@@ -73,6 +78,28 @@ class SourceTester(
                 movie == null -> SourceTestResult.Failure("ユーザーが見つかりません")
                 movie.isLive -> SourceTestResult.Success("配信中です。コメントを読み上げられます")
                 else -> SourceTestResult.Success("ユーザーを確認しました（配信の開始を待ちます）")
+            }
+        } catch (e: IOException) {
+            SourceTestResult.Failure("接続に失敗しました (${e.message})")
+        }
+    }
+
+    /**
+     * チャンネルが実在するかを確認する
+     *
+     * Twitch のチャットは配信していない間も動くため、配信中かどうかは
+     * 読み上げの可否とは関係ない。それでも状況が分かるように結果には添える。
+     */
+    private fun testTwitch(login: String): SourceTestResult {
+        return try {
+            val channel = twitchClient.fetchChannel(login)
+            when {
+                channel == null -> SourceTestResult.Failure("チャンネルが見つかりません")
+                channel.isLive ->
+                    SourceTestResult.Success("${channel.displayName} は配信中です。コメントを読み上げられます")
+
+                else ->
+                    SourceTestResult.Success("${channel.displayName} を確認しました（配信していなくてもチャットは読み上げます）")
             }
         } catch (e: IOException) {
             SourceTestResult.Failure("接続に失敗しました (${e.message})")

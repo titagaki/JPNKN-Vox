@@ -51,7 +51,54 @@ object AppConfig {
 
         /** コメントサーバから切断されたあと、取り直すまでの待ち時間 */
         const val RECONNECT_DELAY_MS = 5000L
+    }
 
+    // Twitch 接続情報
+    //
+    // 公式 API（Helix）は OAuth が要るため使わない。
+    // 詳細と選定理由は docs/spec/twitch-comment-spec.md を参照
+    object Twitch {
+        /** チャットの IRC サーバ（WebSocket） */
+        const val IRC_URL = "wss://irc-ws.chat.twitch.tv:443"
+
+        /** IRC サーバのホスト名。PING に返す PONG のパラメータに使う */
+        const val IRC_HOST = "tmi.twitch.tv"
+
+        /**
+         * 匿名で繋ぐときのニックネームの接頭辞
+         *
+         * `justinfan` で始まる名前は Twitch 側で読み取り専用の匿名ユーザーとして
+         * 扱われ、パスワードを求められない。
+         */
+        const val ANONYMOUS_NICK_PREFIX = "justinfan"
+
+        /** 要求する IRC の拡張。`display-name` を得るために tags が要る */
+        const val CAPABILITIES = "twitch.tv/tags twitch.tv/commands"
+
+        /** チャンネルの存在と配信状態を調べるエンドポイント */
+        const val GQL_URL = "https://gql.twitch.tv/gql"
+
+        /**
+         * GQL に付ける Client-Id
+         *
+         * Twitch の Web ページ自身が使っている公開の値。認証は要らない。
+         */
+        const val GQL_CLIENT_ID = "kimne78kx3ncx6brgo4mv6wki5h1ko"
+
+        /**
+         * JOIN の完了を待つ時間（ミリ秒）
+         *
+         * 存在しないチャンネルへの JOIN は成功も失敗も返らず黙殺されるため、
+         * この時間を過ぎても完了通知が来なければ「見つからない」とみなす。
+         */
+        const val JOIN_TIMEOUT_MS = 10000L
+
+        /** 切断されたあと、繋ぎ直すまでの待ち時間 */
+        const val RECONNECT_DELAY_MS = 5000L
+    }
+
+    // 取得先をまたいで共有する通信の設定
+    object Http {
         /**
          * WebSocket の ping 間隔（秒）
          *

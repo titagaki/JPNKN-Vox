@@ -23,6 +23,7 @@ import com.github.titagaki.jpnknvox.source.CommentConnectorCallbacks
 import com.github.titagaki.jpnknvox.source.JpnknConnector
 import com.github.titagaki.jpnknvox.source.SourceStatus
 import com.github.titagaki.jpnknvox.source.TwicasConnector
+import com.github.titagaki.jpnknvox.source.TwitchConnector
 import com.github.titagaki.jpnknvox.tts.TtsManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -299,6 +300,7 @@ class JpnknVoxService : Service() {
     private fun createConnector(source: CommentSource): CommentConnector = when (source.type) {
         SourceType.JPNKN -> JpnknConnector(source, serviceScope, connectorCallbacks)
         SourceType.TWICAS -> TwicasConnector(source, serviceScope, connectorCallbacks)
+        SourceType.TWITCH -> TwitchConnector(source, serviceScope, connectorCallbacks)
     }
 
     // ========================================

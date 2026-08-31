@@ -2,6 +2,7 @@ package com.github.titagaki.jpnknvox.twicas
 
 import android.util.Log
 import com.github.titagaki.jpnknvox.config.AppConfig
+import com.github.titagaki.jpnknvox.net.SharedHttpClient
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -10,7 +11,6 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 /**
  * ツイキャスのコメント取得に使う通信をまとめたクラス
@@ -23,26 +23,11 @@ import java.util.concurrent.TimeUnit
  * 3. [openCommentSocket] でそこに繋ぎ、新着コメントを受け取る
  */
 class TwicasClient(
-    private val httpClient: OkHttpClient = sharedHttpClient
+    private val httpClient: OkHttpClient = SharedHttpClient.instance
 ) {
 
     companion object {
         private const val TAG = "TwicasClient"
-
-        /**
-         * 取得先をまたいで使い回す OkHttp クライアント
-         *
-         * 取得先ごとに作るとスレッドプールと接続プールがその数だけ増える。
-         * 屋外で長時間動かすアプリなので 1 つにまとめる。
-         */
-        val sharedHttpClient: OkHttpClient by lazy {
-            OkHttpClient.Builder()
-                .connectTimeout(AppConfig.Twicas.REQUEST_TIMEOUT_SEC, TimeUnit.SECONDS)
-                .readTimeout(AppConfig.Twicas.REQUEST_TIMEOUT_SEC, TimeUnit.SECONDS)
-                // 回線が黙って切れたときに WebSocket 側で気付けるようにする
-                .pingInterval(AppConfig.Twicas.PING_INTERVAL_SEC, TimeUnit.SECONDS)
-                .build()
-        }
     }
 
     /**

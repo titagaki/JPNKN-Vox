@@ -37,10 +37,10 @@ class CommentSourceTest {
 
     @Test
     fun `listFromJson - 種別が不明な要素は読み飛ばし、残りは保つ`() {
-        // 将来 Twitch などを足したあとに戻した場合、知らない種別が残っていても
+        // 新しい種別を足したあとのバージョンから戻した場合、知らない種別が残っていても
         // 設定全体が消えないようにする
         val json = """
-            [{"uuid":"a","type":"twitch","sourceId":"ch","color":1},
+            [{"uuid":"a","type":"未来の取得先","sourceId":"ch","color":1},
              {"uuid":"b","type":"jpnkn","sourceId":"mamiko","color":2}]
         """.trimIndent()
 
