@@ -41,11 +41,18 @@ app/src/main/java/com/github/titagaki/jpnknvox/
 │   └── TwitchEvent.kt       # IRC の行と GQL 応答のパース（純粋関数）
 ├── tts/TtsManager.kt        # TTS管理・キュー制御
 ├── overlay/OverlayManager.kt # WindowManagerオーバーレイ
+├── export/
+│   ├── CommentExportService.kt # 配信アプリ (genkai-broadcaster) へコメントを渡す Bound Service
+│   └── ExportState.kt       # 配信アプリへ知らせる状態の決定（純粋関数）
 └── ui/
     ├── screens/             # Home / Log / Settings 画面
     ├── navigation/Screen.kt # ナビゲーション定義
     └── theme/               # Color / Theme / Type
+app/src/main/aidl/io/github/titagaki/genkaibroadcaster/comment/  # 配信アプリとの AIDL（配信アプリからのコピー）
+app/src/main/java/io/github/titagaki/genkaibroadcaster/comment/  # CommentEntry（同上）
 ```
+
+配信アプリとの連携は `docs/spec/comment-export-spec.md`。
 
 ### 1.2 コンポーネント図
 
@@ -726,6 +733,8 @@ sealed class Screen(route, title, icon)
 | `FOREGROUND_SERVICE_SPECIAL_USE` | Android 14+ のフォアグラウンドサービス | AndroidManifest（自動付与） |
 | `POST_NOTIFICATIONS` | 常駐通知の表示 | Android 13+ は実行時リクエスト |
 | `SYSTEM_ALERT_WINDOW` | オーバーレイ表示 | `Settings.ACTION_MANAGE_OVERLAY_PERMISSION` へ誘導 |
+
+`export/CommentExportService` は `exported="true"` で権限を要求しない（理由は `docs/spec/comment-export-spec.md` §3）。
 
 ---
 

@@ -4,6 +4,7 @@
 
 JPNKN掲示板（bbs.jpnkn.com）・ツイキャス・Twitchのリアルタイムコメントを受信し、TTSで読み上げるAndroidアプリ。
 取得先は複数登録でき、同時に読み上げる。IRL配信（屋外配信）での手放し運用を想定。
+配信アプリ genkai-broadcaster へは Bound Service (AIDL) でコメントを渡す（`docs/spec/comment-export-spec.md`）。
 
 **パッケージ名:** `com.github.titagaki.jpnknvox`
 **バージョン:** 0.2.1
@@ -73,6 +74,8 @@ JPNKN掲示板（bbs.jpnkn.com）・ツイキャス・Twitchのリアルタイ�
 - `JpnknVoxService` が `CommentConnector`（取得先ごとに1つ）/ `TtsManager` / `OverlayManager` を統括する
 - 取得先の追加・編集・削除・起動はすべて `EXTRA_SOURCES` の1経路。サービス側が差分だけ接続・切断する
 - 新しい取得先の種別を足すときは `SourceType` に追加し、`CommentConnector` を実装する
+- `app/src/main/aidl/` と `io/github/titagaki/genkaibroadcaster/comment/CommentEntry.kt` は配信アプリからのコピー。
+  ここでは編集せず、配信アプリ側を直してからコピーし直す
 - TTSのキューは全取得先で1本。どこから来たコメントも同じキューに入る
 - メッセージログ・システムログともに最大500件で古いものから削除
 - オーバーレイ表示は最大60文字に切り詰め（表示は2行固定で、あふれた分は末尾を省略）
@@ -102,6 +105,7 @@ JPNKN掲示板（bbs.jpnkn.com）・ツイキャス・Twitchのリアルタイ�
 - `docs/spec/schema-jpnkn.json` — MQTT ペイロードの JSON スキーマ
 - `docs/spec/twicas-comment-spec.md` — ツイキャスのコメント取得仕様
 - `docs/spec/twitch-comment-spec.md` — Twitch のコメント取得仕様
+- `docs/spec/comment-export-spec.md` — 配信アプリ (genkai-broadcaster) へのコメント受け渡し仕様
 - `docs/references/jpnkn-vox-settings-inline.html` — 設定画面のモックアップ（取得先リスト版）
 - `docs/references/jpnkn-vox-settings.html` — 設定画面のモックアップ（板 ID 1 件だった頃）
 - `README.md` — ユーザー向けインストール・ビルド手順（日本語）

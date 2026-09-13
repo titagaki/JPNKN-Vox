@@ -39,6 +39,7 @@ MQTT の接続状態ではない。アプリ内に接続状態の常時表示は
 
 ## 完了
 
+- 配信アプリ genkai-broadcaster へコメントを渡す Bound Service (AIDL) を追加した（`docs/spec/comment-export-spec.md`）
 - Twitch のコメント読み上げに対応した（匿名の IRC over WebSocket。`docs/spec/twitch-comment-spec.md`）
 - ツイキャスのコメント読み上げに対応し、設定画面を複数の「コメント取得先」を登録できるリストに作り替えた
 - オーバーレイの本文を受信時ではなく読み上げ開始時に更新し、読み上げの遅れと表示のずれをなくした

@@ -75,6 +75,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // 配信アプリ (genkai-broadcaster) とのコメント受け渡し I/F (app/src/main/aidl)
+        aidl = true
     }
 
     packaging {

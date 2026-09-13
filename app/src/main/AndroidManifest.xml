@@ -47,6 +47,20 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="tts_reader" />
         </service>
+
+        <!--
+            配信アプリ (genkai-broadcaster) へコメントを渡す Bound Service。docs/spec/comment-export-spec.md
+            権限で守らない: 両アプリの署名鍵が違うため signature は使えず、normal の自前権限は
+            定義側 (このアプリ) が後からインストールされると配信アプリに付与されず bind が拒否された。
+            渡すのは公開掲示板・チャットのコメントだけで、こちらへの書き込みの口は無い。
+        -->
+        <service
+            android:name=".export.CommentExportService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="io.github.titagaki.genkaibroadcaster.comment.action.COMMENT_SOURCE" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

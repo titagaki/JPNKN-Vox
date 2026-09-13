@@ -117,6 +117,7 @@ class JpnknVoxService : Service() {
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        MessageManager.setServiceRunning(true)
         Log.d(TAG, "Service onCreate")
 
         MessageManager.addSystemLog("サービスを初期化しています...")
@@ -223,6 +224,7 @@ class JpnknVoxService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        MessageManager.setServiceRunning(false)
         Log.d(TAG, "Service onDestroy")
         MessageManager.addSystemLog("サービスを停止しています...")
 
