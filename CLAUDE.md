@@ -7,7 +7,7 @@ JPNKN掲示板（bbs.jpnkn.com）・ツイキャス・Twitchのリアルタイ�
 配信アプリ genkai-broadcaster へは Bound Service (AIDL) でコメントを渡す（`docs/spec/comment-export-spec.md`）。
 
 **パッケージ名:** `com.github.titagaki.jpnknvox`
-**バージョン:** 0.2.1
+**バージョン:** 0.3.0
 **最小SDK:** Android 12 (API 31)
 
 ## 技術スタック

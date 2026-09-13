@@ -5,7 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val appVersion = "0.2.1"
+val appVersion = "0.3.0"
 
 /**
  * versionName から versionCode を作る（0.2.0 → 200、1.0.0 → 10000）
