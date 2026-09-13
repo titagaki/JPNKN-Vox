@@ -79,10 +79,16 @@ JpnknVoxService ─ addMessage ─▶ MessageManager
   購読は `Dispatchers.Main.immediate` に寄せ、`beginBroadcast` を重ねない。
 - debug ビルド同士（`.debug` サフィックス）でも同じ action 名で繋がる（名前は `applicationId` に依存しない）。
 
-## 5. 実機で確認すること
+## 5. 実機確認
+
+2026-09-13 に genkai-broadcaster v0.2.0（debug 同士）で確認済み:
 
 - genkai-broadcaster の設定 → コメントに `JPNKN Vox` が出ること（Android 11+ の `<queries>` 越し）。
 - 読み上げ停止中に配信を始めると配信アプリの状態行が `コメント: JPNKN Vox が停止中` になり、
   JPNKN Vox を開始すると `コメント: JPNKN Vox` に変わること。
-- jpnkn / ツイキャス / Twitch のコメントが配信映像の右下に出ること。投稿者名が薄い色で前置されること。
+- コメントが配信映像の右下（設定で右上）に出ること。投稿者名が薄い色で前置されること。
+
+未確認:
+
 - JPNKN Vox を強制終了 → 再起動で配信アプリ側が自動で復帰すること。
+- release 同士（署名鍵が別）でも同じように繋がること（権限を使わないので debug と同じはず）。
