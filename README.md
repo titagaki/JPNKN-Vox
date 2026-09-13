@@ -28,7 +28,7 @@ Android でリアルタイムに取得・通知するアプリケーション。
 本アプリは Google Play ストア外で配布しているため、以下の手順で手動インストールが必要。
 
 1. **APKのダウンロード**
-  - [Releases](https://github.com/titagaki/jpnkn-vox/releases) から最新の `app-release.apk` をダウンロード。
+  - [Releases](https://github.com/titagaki/jpnkn-vox/releases) から最新の `JPNKNVox-release-<バージョン>.apk` をダウンロード。
 2. **不明なアプリのインストール許可**
   - ダウンロードしたファイルを開く際、ブラウザ（Chrome等）に対して「不明なアプリのインストール」の許可を求められた場合は、設定画面から **[このソースのアプリを許可]** を有効にする。
 3. **Playプロテクトの警告回避**
@@ -70,20 +70,35 @@ Android でリアルタイムに取得・通知するアプリケーション。
 
 ## ビルド
 
-```bash
-./gradlew assembleDebug
+Android Studio でプロジェクトを開き、Run ▶ で実機にデバッグ版をインストールして起動する。
+
+### リリース APK の作成
+
+署名情報は `local.properties`（git 管理外）に書く。鍵ファイルはリポジトリ外に置く。
+
+```properties
+KEYSTORE_FILE=C:/Users/<name>/keys/jpnknvox.jks
+KEYSTORE_PASSWORD=...
+KEY_ALIAS=jpnknvox
+KEY_PASSWORD=...
 ```
 
-> Windows の場合は `.\gradlew.bat assembleDebug`  
-> JAVA_HOME 未設定時: `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`
+1. Build → Select Build Variant… で `app` を **release** にする
+2. Build → Generate App Bundles or APKs → **Generate APKs**
+3. `app/build/outputs/apk/release/app-release.apk` ができ、続けて配布用の `app/build/outputs/dist/JPNKNVox-release-<バージョン>.apk` が自動でコピーされる
+4. 終わったら Build Variant を **debug** に戻す
+
+配布は GitHub Releases にタグ `v<バージョン>` を切って `JPNKNVox-release-<バージョン>.apk` を添付する。
+バージョンは `app/build.gradle.kts` 先頭の `appVersion` だけを直す（`versionCode` は自動算出）。
+
+コマンドラインなら `.\gradlew.bat assembleRelease`（JAVA_HOME 未設定時は
+`$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`）。
 
 ## テスト
 
-```bash
-./gradlew testDebugUnitTest
-```
-
-レポート: `app/build/reports/tests/testDebugUnitTest/index.html`
+Android Studio で `app/src/test` を右クリック → **Run 'Tests in ...'**。
+コマンドラインなら `.\gradlew.bat testDebugUnitTest`
+（レポート: `app/build/reports/tests/testDebugUnitTest/index.html`）。
 
 ## 技術スタック
 

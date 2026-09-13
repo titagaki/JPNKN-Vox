@@ -97,30 +97,23 @@ android {
     }
 }
 
-// APKファイル名をリネームするタスク
-tasks.register("renameDebugApk") {
+// 配布用の名前 (JPNKNVox-{debug|release}-<version>.apk) で APK を build/outputs/dist/ にコピーするタスク。
+// AGP の出力ディレクトリ (outputs/apk/) に書き戻すと AGP 側のタスクと依存関係が衝突して検証エラーになるので別ディレクトリにする。
+// release は assembleRelease (Android Studio の Build → Generate APKs も同じ) の後に自動で走る。
+tasks.register<Copy>("renameDebugApk") {
     dependsOn("assembleDebug")
-    doLast {
-        val debugApk = file("build/outputs/apk/debug/app-debug.apk")
-        val renamedApk = file("build/outputs/apk/debug/JPNKNVox-debug-$appVersion.apk")
-        if (debugApk.exists()) {
-            debugApk.renameTo(renamedApk)
-            println("APK renamed to: ${renamedApk.name}")
-        }
-    }
+    from(layout.buildDirectory.dir("outputs/apk/debug")) { include("app-debug.apk") }
+    into(layout.buildDirectory.dir("outputs/dist"))
+    rename { "JPNKNVox-debug-$appVersion.apk" }
 }
 
-tasks.register("renameReleaseApk") {
+tasks.register<Copy>("renameReleaseApk") {
     dependsOn("assembleRelease")
-    doLast {
-        val releaseApk = file("build/outputs/apk/release/app-release.apk")
-        val renamedApk = file("build/outputs/apk/release/JPNKNVox-release-$appVersion.apk")
-        if (releaseApk.exists()) {
-            releaseApk.renameTo(renamedApk)
-            println("APK renamed to: ${renamedApk.name}")
-        }
-    }
+    from(layout.buildDirectory.dir("outputs/apk/release")) { include("app-release.apk") }
+    into(layout.buildDirectory.dir("outputs/dist"))
+    rename { "JPNKNVox-release-$appVersion.apk" }
 }
+tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy("renameReleaseApk") }
 
 dependencies {
     implementation(libs.androidx.core.ktx)

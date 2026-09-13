@@ -40,8 +40,9 @@ JPNKN掲示板（bbs.jpnkn.com）・ツイキャス・Twitchのリアルタイ�
 # app/build/reports/tests/testDebugUnitTest/index.html
 ```
 
-出力APK名: `JPNKNVox-{debug|release}-{バージョン}.apk`
-（`assembleXxx` の直後は `app-{debug|release}.apk`。`renameDebugApk` / `renameReleaseApk` を実行するとリネームされる）
+配布用 APK: `app/build/outputs/dist/JPNKNVox-{debug|release}-{バージョン}.apk`
+（`app-{debug|release}.apk` のコピー。release は `assembleRelease` の後に自動で作られる。debug は `renameDebugApk` を実行）
+ユーザーは Android Studio でビルドする（手順は README の「ビルド」）。
 
 バージョンを上げるときは `app/build.gradle.kts` の `appVersion` とこのファイルの記載を直す。
 `versionCode` は `appVersion` から自動算出されるので触らない（0.2.0 → 200）。
